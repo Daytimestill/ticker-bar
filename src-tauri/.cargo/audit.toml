@@ -1,0 +1,13 @@
+# cargo-audit 配置
+#
+# cargo audit 扫描的是 Cargo.lock，而 Cargo.lock 会列出依赖的**全部可选依赖**，
+# 无论该 feature 是否被启用。下面这些条目经 `cargo tree -i <crate> --target all`
+# 核实：在本项目的实际依赖图里根本不存在，也就从未被编译进产物。
+
+[advisories]
+ignore = [
+    # rkyv 0.7 是 rust_decimal 的可选依赖（rkyv feature）。本项目只启用 serde-str，
+    # 未启用 rkyv，`cargo tree -i rkyv --target all` 无任何输出——不编译、不分发。
+    # 若将来启用 rust_decimal 的 rkyv feature，必须先移除本条并升级到 >= 0.8.17。
+    "RUSTSEC-2026-0235",
+]

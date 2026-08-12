@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 description = "在 macOS 菜单栏显示股票价格、涨跌与持仓收益的本地工具"
 license = "MIT"
-repository = "https://github.com/Daytimestill/tickerbar"
+repository = "https://github.com/Daytimestill/ticker-bar"
 publish = false
 
 [lib]

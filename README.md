@@ -21,7 +21,7 @@
 
 > ⚠️ **本应用未经 Apple 公证（notarization）**，从网上下载后 macOS 会拦截。这是所有未付费加入 Apple 开发者计划的开源 macOS 应用的共同处境，不是软件有问题。
 
-1. 从 [Releases](https://github.com/Daytimestill/tickerbar/releases) 下载 `TickerBar.dmg`，把 TickerBar 拖入「应用程序」
+1. 从 [Releases](https://github.com/Daytimestill/ticker-bar/releases) 下载 `TickerBar.dmg`，把 TickerBar 拖入「应用程序」
 2. 首次打开会提示无法验证开发者，此时**不要**反复双击，按以下任一方式放行：
 
    **方式一（图形界面）**：打开 系统设置 → 隐私与安全性，滚动到底部会看到「已阻止 TickerBar」，点「仍要打开」并输入密码。只需做一次。
@@ -91,9 +91,9 @@ cargo audit
 
 目前只有 macOS 版，我也没有 Windows 机器，短期不会自己做。
 
-如果你想做，[`docs/WINDOWS_PORT_PROMPT.md`](docs/WINDOWS_PORT_PROMPT.md) 是一份可以直接喂给 AI coding agent 的移植提示词：整理了全部平台差异、哪些代码碰不得、以及验收清单。
+想做的话，[`docs/WINDOWS_PORT.md`](docs/WINDOWS_PORT.md) 讲清了难在哪、要做什么、有哪些坑。
 
-里面写清楚了最大的那道坎——**Windows 系统托盘不支持显示文字**（`tray-icon` crate 明确标注 `Windows: Unsupported`），所以「在菜单栏直接看到股价」这个核心形态需要重新设计，文档里给了三条路和各自的取舍。
+结论先放这儿：**代码层面移植不难，难的是产品形态得重新设计。** 业务逻辑全是平台无关的，但 **Windows 系统托盘不支持显示文字**（`tray-icon` crate 标注 `Windows: Unsupported`），而「不打开任何窗口、扫一眼就知道现在多少钱」正是这个应用的立身之本。文档里给了三个方向和各自的代价。
 
 ## 技术栈
 

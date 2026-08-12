@@ -87,6 +87,14 @@ cargo fmt --check
 cargo audit
 ```
 
+## Windows 版？
+
+目前只有 macOS 版，我也没有 Windows 机器，短期不会自己做。
+
+如果你想做，[`docs/WINDOWS_PORT_PROMPT.md`](docs/WINDOWS_PORT_PROMPT.md) 是一份可以直接喂给 AI coding agent 的移植提示词：整理了全部平台差异、哪些代码碰不得、以及验收清单。
+
+里面写清楚了最大的那道坎——**Windows 系统托盘不支持显示文字**（`tray-icon` crate 明确标注 `Windows: Unsupported`），所以「在菜单栏直接看到股价」这个核心形态需要重新设计，文档里给了三条路和各自的取舍。
+
 ## 技术栈
 
 Tauri 2（Rust 后端 + Vue 3 前端），行情计算使用 `rust_decimal` 避免浮点误差。

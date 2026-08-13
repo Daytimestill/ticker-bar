@@ -89,9 +89,7 @@ cargo audit
 
 ## Windows 版？
 
-目前只有 macOS 版，我也没有 Windows 机器，短期不会自己做。
-
-想做的话，[`docs/WINDOWS_PORT.md`](docs/WINDOWS_PORT.md) 讲清了难在哪、要做什么、有哪些坑。
+目前只有 macOS 版。想做的话，[`docs/WINDOWS_PORT.md`](docs/WINDOWS_PORT.md) 讲清了难在哪、要做什么、有哪些坑。
 
 结论先放这儿：**代码层面移植不难，难的是产品形态得重新设计。** 业务逻辑全是平台无关的，但 **Windows 系统托盘不支持显示文字**（`tray-icon` crate 标注 `Windows: Unsupported`），而「不打开任何窗口、扫一眼就知道现在多少钱」正是这个应用的立身之本。文档里给了三个方向和各自的代价。
 

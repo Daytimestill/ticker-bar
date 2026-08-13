@@ -86,13 +86,13 @@ async fn tencent_provider_searches_stocks_by_name() {
     let provider = TencentQuoteProvider::new().expect("HTTP client should initialize");
 
     let results = provider
-        .search_stocks("浪潮软件")
+        .search_stocks("贵州茅台")
         .await
         .expect("live stock search should be available");
 
     assert!(results.iter().any(|result| {
-        result.symbol == "600756.SH"
-            && result.name == "浪潮软件"
+        result.symbol == "600519.SH"
+            && result.name == "贵州茅台"
             && result.market == "沪市"
             && result.currency == "CNY"
     }));

@@ -16,8 +16,8 @@ const XIAOMI = {
   currency: 'HKD',
 }
 const INSPUR = {
-  symbol: '600756.SH',
-  name: '浪潮软件',
+  symbol: '600519.SH',
+  name: '贵州茅台',
   market: '沪市',
   currency: 'CNY',
 }

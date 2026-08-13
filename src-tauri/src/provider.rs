@@ -544,7 +544,7 @@ mod tests {
     use crate::{DisplayPreset, apply_display_preset, render_tray_title};
 
     const TENCENT_XIAOMI_RESPONSE: &str = r#"v_r_hk01810="100~小米集团-W~01810~27.380~28.780~28.740~102533383.0~0~0~27.380~0~0~0~0~0~0~0~0~0~27.380~0~0~0~0~0~0~0~0~0~102533383.0~2026/08/03 10:00:40~-1.400~-4.86~28.760~27.240~27.380~102533383.0~2836431826.930~0~15.35~~0~0~5.28~5858.9016~7075.5637~XIAOMI-W~0.00~59.900~21.300~3.44~5.35~0~0~0~0~0~17.63~2.40~0.48~200~-30.33~-4.53~GP~13.15~7.03~-1.30~17.61~-11.16~25842088167.00~21398472034.00~33.07~0.000~27.663~-36.80~HKD~1~30";"#;
-    const TENCENT_SEARCH_RESPONSE: &str = r#"v_hint="sh~600756~\u6d6a\u6f6e\u8f6f\u4ef6~lcrj~GP-A^hk~01810~\u5c0f\u7c73\u96c6\u56e2w~xmjtw~GP^hk~13011~\u5c0f\u7c73\u4fe1\u8bc1~xmxz~QZ""#;
+    const TENCENT_SEARCH_RESPONSE: &str = r#"v_hint="sh~600519~\u8d35\u5dde\u8305\u53f0~gzmt~GP-A^hk~01810~\u5c0f\u7c73\u96c6\u56e2w~xmjtw~GP^hk~13011~\u5c0f\u7c73\u4fe1\u8bc1~xmxz~QZ""#;
 
     #[test]
     fn normalizes_supported_stock_symbols_for_tencent() {
@@ -569,12 +569,12 @@ mod tests {
             "sz000001"
         );
         assert_eq!(
-            TencentQuoteProvider::normalize_symbol("sh600756").unwrap(),
-            "sh600756"
+            TencentQuoteProvider::normalize_symbol("sh600519").unwrap(),
+            "sh600519"
         );
         assert_eq!(
-            TencentQuoteProvider::canonical_symbol("sh600756").unwrap(),
-            "600756.SH"
+            TencentQuoteProvider::canonical_symbol("sh600519").unwrap(),
+            "600519.SH"
         );
     }
 
@@ -653,15 +653,15 @@ mod tests {
                 position: None,
             },
             StockConfig {
-                symbol: "600756.SH".into(),
-                short_name: "浪潮".into(),
+                symbol: "600519.SH".into(),
+                short_name: "贵州茅台".into(),
                 currency: "CNY".into(),
                 ..template
             },
         ];
-        let provider_symbols = vec!["r_hk01810".to_owned(), "sh600756".to_owned()];
+        let provider_symbols = vec!["r_hk01810".to_owned(), "sh600519".to_owned()];
 
-        // 响应里只有小米：小米解析成功，浪潮单独报错，互不影响。
+        // 响应里只有小米：小米解析成功，茅台单独报错，互不影响。
         let results = TencentQuoteProvider::parse_batch_response(
             &stocks,
             &provider_symbols,
@@ -741,8 +741,8 @@ mod tests {
             results,
             vec![
                 StockSearchResult {
-                    symbol: "600756.SH".into(),
-                    name: "浪潮软件".into(),
+                    symbol: "600519.SH".into(),
+                    name: "贵州茅台".into(),
                     market: "沪市".into(),
                     currency: "CNY".into(),
                 },

@@ -147,10 +147,10 @@ mod tests {
     #[test]
     fn sums_positions_of_the_same_currency() {
         let stocks = vec![
-            stock("600756.SH", "CNY", Some(("100", "10"))),
+            stock("600519.SH", "CNY", Some(("100", "10"))),
             stock("000001.SZ", "CNY", Some(("200", "5"))),
         ];
-        let quotes = [("600756.SH", quote("12")), ("000001.SZ", quote("4"))];
+        let quotes = [("600519.SH", quote("12")), ("000001.SZ", quote("4"))];
 
         let summary = summarize_portfolio(&stocks, |symbol| {
             quotes
@@ -175,9 +175,9 @@ mod tests {
     fn never_mixes_different_currencies_into_one_total() {
         let stocks = vec![
             stock("01810.HK", "HKD", Some(("100", "20"))),
-            stock("600756.SH", "cny", Some(("100", "10"))),
+            stock("600519.SH", "cny", Some(("100", "10"))),
         ];
-        let quotes = [("01810.HK", quote("30")), ("600756.SH", quote("11"))];
+        let quotes = [("01810.HK", quote("30")), ("600519.SH", quote("11"))];
 
         let summary = summarize_portfolio(&stocks, |symbol| {
             quotes
@@ -197,7 +197,7 @@ mod tests {
     #[test]
     fn skips_stocks_without_position_and_counts_missing_quotes() {
         let stocks = vec![
-            stock("600756.SH", "CNY", None),
+            stock("600519.SH", "CNY", None),
             stock("000001.SZ", "CNY", Some(("100", "10"))),
         ];
 
@@ -213,10 +213,10 @@ mod tests {
     fn total_return_uses_aggregate_cost_not_the_average_of_rates() {
         // 大仓小涨 + 小仓大涨：按仓位加权的合计收益率必须贴近大仓
         let stocks = vec![
-            stock("600756.SH", "CNY", Some(("1000", "10"))),
+            stock("600519.SH", "CNY", Some(("1000", "10"))),
             stock("000001.SZ", "CNY", Some(("10", "10"))),
         ];
-        let quotes = [("600756.SH", quote("11")), ("000001.SZ", quote("20"))];
+        let quotes = [("600519.SH", quote("11")), ("000001.SZ", quote("20"))];
 
         let summary = summarize_portfolio(&stocks, |symbol| {
             quotes

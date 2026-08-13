@@ -95,8 +95,8 @@ describe('TickerBar settings window', () => {
       if (command === 'search_stocks') {
         return Promise.resolve([
           {
-            symbol: '600756.SH',
-            name: '浪潮软件',
+            symbol: '600519.SH',
+            name: '贵州茅台',
             market: '沪市',
             currency: 'CNY',
           },
@@ -279,29 +279,29 @@ describe('TickerBar settings window', () => {
     vi.useFakeTimers()
 
     try {
-      await wrapper.get('[data-testid="stock-search-input"]').setValue('浪潮软件')
+      await wrapper.get('[data-testid="stock-search-input"]').setValue('贵州茅台')
       await vi.advanceTimersByTimeAsync(300)
       await flushPromises()
 
       expect(invoke).toHaveBeenCalledWith('search_stocks', {
-        query: '浪潮软件',
+        query: '贵州茅台',
       })
       const option = wrapper.get(
-        '[data-testid="stock-search-option-600756.SH"]',
+        '[data-testid="stock-search-option-600519.SH"]',
       )
-      expect(option.text()).toContain('浪潮软件')
-      expect(option.text()).toContain('600756.SH')
+      expect(option.text()).toContain('贵州茅台')
+      expect(option.text()).toContain('600519.SH')
       expect(option.text()).toContain('沪市')
 
       await option.trigger('click')
       // 选中即加入股票列表并置顶
-      const row = wrapper.get('[data-testid="stock-row-600756.SH"]')
-      expect(row.text()).toContain('浪潮软件')
+      const row = wrapper.get('[data-testid="stock-row-600519.SH"]')
+      expect(row.text()).toContain('贵州茅台')
       expect(row.find('[data-testid="active-stock-badge"]').exists()).toBe(true)
       expect(
         (wrapper.get('[data-testid="stock-short-name"]').element as HTMLInputElement)
           .value,
-      ).toBe('浪潮软件')
+      ).toBe('贵州茅台')
       expect(
         (wrapper.get('[data-testid="stock-currency"]').element as HTMLInputElement)
           .value,
@@ -317,8 +317,8 @@ describe('TickerBar settings window', () => {
             stocks: [
               expect.objectContaining({ symbol: '01810.HK' }),
               expect.objectContaining({
-                symbol: '600756.SH',
-                shortName: '浪潮软件',
+                symbol: '600519.SH',
+                shortName: '贵州茅台',
                 currency: 'CNY',
               }),
             ],
@@ -337,11 +337,11 @@ describe('TickerBar settings window', () => {
     vi.useFakeTimers()
 
     try {
-      await wrapper.get('[data-testid="stock-search-input"]').setValue('浪潮软件')
+      await wrapper.get('[data-testid="stock-search-input"]').setValue('贵州茅台')
       await vi.advanceTimersByTimeAsync(300)
       await flushPromises()
       await wrapper
-        .get('[data-testid="stock-search-option-600756.SH"]')
+        .get('[data-testid="stock-search-option-600519.SH"]')
         .trigger('click')
 
       // 新增股票自动置顶，点击旧股票行可切回
@@ -354,8 +354,8 @@ describe('TickerBar settings window', () => {
       ).toBe(true)
 
       // 移除非置顶股票
-      await wrapper.get('[data-testid="stock-remove-600756.SH"]').trigger('click')
-      expect(wrapper.find('[data-testid="stock-row-600756.SH"]').exists()).toBe(
+      await wrapper.get('[data-testid="stock-remove-600519.SH"]').trigger('click')
+      expect(wrapper.find('[data-testid="stock-row-600519.SH"]').exists()).toBe(
         false,
       )
       expect(wrapper.find('[data-testid="stock-row-01810.HK"]').exists()).toBe(
@@ -437,30 +437,30 @@ describe('TickerBar settings window', () => {
     vi.useFakeTimers()
 
     try {
-      await wrapper.get('[data-testid="stock-search-input"]').setValue('浪潮软件')
+      await wrapper.get('[data-testid="stock-search-input"]').setValue('贵州茅台')
       await vi.advanceTimersByTimeAsync(300)
       await flushPromises()
       await wrapper
-        .get('[data-testid="stock-search-option-600756.SH"]')
+        .get('[data-testid="stock-search-option-600519.SH"]')
         .trigger('click')
 
-      // 新加的浪潮软件自动置顶，此刻顺序是 [小米, 浪潮软件]
+      // 新加的贵州茅台自动置顶，此刻顺序是 [小米, 贵州茅台]
       const order = () =>
         wrapper
           .findAll('[data-testid^="stock-row-"]')
           .map((row) => row.attributes('data-testid'))
-      expect(order()).toEqual(['stock-row-01810.HK', 'stock-row-600756.SH'])
+      expect(order()).toEqual(['stock-row-01810.HK', 'stock-row-600519.SH'])
 
-      // 把置顶的浪潮软件上移一位
+      // 把置顶的贵州茅台上移一位
       await wrapper
-        .get('[data-testid="stock-move-up-600756.SH"]')
+        .get('[data-testid="stock-move-up-600519.SH"]')
         .trigger('click')
-      expect(order()).toEqual(['stock-row-600756.SH', 'stock-row-01810.HK'])
+      expect(order()).toEqual(['stock-row-600519.SH', 'stock-row-01810.HK'])
 
-      // 置顶仍是浪潮软件，没有因为下标位移换成小米
+      // 置顶仍是贵州茅台，没有因为下标位移换成小米
       expect(
         wrapper
-          .get('[data-testid="stock-row-600756.SH"]')
+          .get('[data-testid="stock-row-600519.SH"]')
           .find('[data-testid="active-stock-badge"]')
           .exists(),
       ).toBe(true)
@@ -473,7 +473,7 @@ describe('TickerBar settings window', () => {
           config: expect.objectContaining({
             activeStock: 0,
             stocks: [
-              expect.objectContaining({ symbol: '600756.SH' }),
+              expect.objectContaining({ symbol: '600519.SH' }),
               expect.objectContaining({ symbol: '01810.HK' }),
             ],
           }),
@@ -491,7 +491,7 @@ describe('TickerBar settings window', () => {
       await flushPromises()
       await wrapper.get('[data-testid="nav-stock"]').trigger('click')
 
-      await wrapper.get('[data-testid="stock-short-name"]').setValue('浪潮')
+      await wrapper.get('[data-testid="stock-short-name"]').setValue('茅台')
       await wrapper.get('[data-testid="stock-currency"]').setValue('CNY')
       // 文本输入的预览请求做了防抖，推进时间才会真正发出。
       await vi.advanceTimersByTimeAsync(300)
@@ -503,7 +503,7 @@ describe('TickerBar settings window', () => {
         config: {
           stocks: [
             {
-              shortName: '浪潮',
+              shortName: '茅台',
               currency: 'CNY',
             },
           ],
@@ -524,8 +524,8 @@ describe('TickerBar settings window', () => {
 
       const input = wrapper.get('[data-testid="stock-short-name"]')
       await input.setValue('浪')
-      await input.setValue('浪潮')
-      await input.setValue('浪潮软')
+      await input.setValue('茅台')
+      await input.setValue('茅台酒')
       await vi.advanceTimersByTimeAsync(300)
 
       const previewCalls = invoke.mock.calls.filter(
@@ -1094,9 +1094,9 @@ describe('TickerBar settings window', () => {
       }
       if (command === 'search_stocks') {
         const { query } = payload as { query: string }
-        if (query.includes('浪潮')) {
+        if (query.includes('茅台')) {
           return Promise.resolve([
-            { symbol: '600756.SH', name: '浪潮软件', market: '沪市', currency: 'CNY' },
+            { symbol: '600519.SH', name: '贵州茅台', market: '沪市', currency: 'CNY' },
           ])
         }
         return Promise.resolve([
@@ -1112,11 +1112,11 @@ describe('TickerBar settings window', () => {
 
     try {
       const search = wrapper.get('[data-testid="stock-search-input"]')
-      await search.setValue('浪潮软件')
+      await search.setValue('贵州茅台')
       await vi.advanceTimersByTimeAsync(300)
       await flushPromises()
       await wrapper
-        .get('[data-testid="stock-search-option-600756.SH"]')
+        .get('[data-testid="stock-search-option-600519.SH"]')
         .trigger('click')
       await search.setValue('平安银行')
       await vi.advanceTimersByTimeAsync(300)
@@ -1125,24 +1125,24 @@ describe('TickerBar settings window', () => {
         .get('[data-testid="stock-search-option-000001.SZ"]')
         .trigger('click')
 
-      // 持仓页给中间的浪潮软件配持仓
+      // 持仓页给中间的贵州茅台配持仓
       await wrapper.get('[data-testid="nav-position"]').trigger('click')
       await wrapper
-        .get('[data-testid="position-quantity-600756.SH"]')
+        .get('[data-testid="position-quantity-600519.SH"]')
         .setValue('500')
       await wrapper
-        .get('[data-testid="position-average-cost-600756.SH"]')
+        .get('[data-testid="position-average-cost-600519.SH"]')
         .setValue('20')
 
       // 回股票页删掉排在它前面的小米（非置顶，可删）
       await wrapper.get('[data-testid="nav-stock"]').trigger('click')
       await wrapper.get('[data-testid="stock-remove-01810.HK"]').trigger('click')
 
-      // 持仓仍然挂在浪潮软件上，不会因下标前移而串到别的股票
+      // 持仓仍然挂在贵州茅台上，不会因下标前移而串到别的股票
       await wrapper.get('[data-testid="nav-position"]').trigger('click')
       expect(
         (
-          wrapper.get('[data-testid="position-quantity-600756.SH"]')
+          wrapper.get('[data-testid="position-quantity-600519.SH"]')
             .element as HTMLInputElement
         ).value,
       ).toBe('500')
@@ -1157,7 +1157,7 @@ describe('TickerBar settings window', () => {
         }
       ).config.stocks
       expect(
-        stocks.find((stock) => stock.symbol === '600756.SH')?.position,
+        stocks.find((stock) => stock.symbol === '600519.SH')?.position,
       ).toMatchObject({ quantity: '500', averageCost: '20' })
       expect(
         stocks.find((stock) => stock.symbol === '000001.SZ')?.position,
@@ -1174,25 +1174,25 @@ describe('TickerBar settings window', () => {
     vi.useFakeTimers()
 
     try {
-      await wrapper.get('[data-testid="stock-search-input"]').setValue('浪潮软件')
+      await wrapper.get('[data-testid="stock-search-input"]').setValue('贵州茅台')
       await vi.advanceTimersByTimeAsync(300)
       await flushPromises()
       await wrapper
-        .get('[data-testid="stock-search-option-600756.SH"]')
+        .get('[data-testid="stock-search-option-600519.SH"]')
         .trigger('click')
 
-      // 给刚置顶的浪潮软件建一条提醒
+      // 给刚置顶的贵州茅台建一条提醒
       await wrapper.get('[data-testid="nav-alerts"]').trigger('click')
       await wrapper.get('[data-testid="alert-create"]').trigger('click')
       await wrapper.get('[data-testid="alert-threshold"]').setValue('30')
       await wrapper.get('[data-testid="alert-metric"]').setValue('price')
       await wrapper.get('[data-testid="alert-submit"]').trigger('click')
-      expect(wrapper.get('[data-testid="alert-list"]').text()).toContain('浪潮软件')
+      expect(wrapper.get('[data-testid="alert-list"]').text()).toContain('贵州茅台')
 
-      // 换回小米置顶后删除浪潮软件：提醒规则应一并清理
+      // 换回小米置顶后删除贵州茅台：提醒规则应一并清理
       await wrapper.get('[data-testid="nav-stock"]').trigger('click')
       await wrapper.get('[data-testid="stock-row-01810.HK"]').trigger('click')
-      await wrapper.get('[data-testid="stock-remove-600756.SH"]').trigger('click')
+      await wrapper.get('[data-testid="stock-remove-600519.SH"]').trigger('click')
 
       await wrapper.get('[data-testid="nav-alerts"]').trigger('click')
       expect(wrapper.find('[data-testid="alert-list"]').exists()).toBe(false)

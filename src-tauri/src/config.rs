@@ -354,8 +354,8 @@ mod tests {
         let legacy = r#"{
             "schemaVersion": 1,
             "provider": "tencent",
-            "symbol": "600756.SH",
-            "shortName": "浪潮",
+            "symbol": "600519.SH",
+            "shortName": "贵州茅台",
             "currency": "CNY",
             "position": { "quantity": "100", "averageCost": "20.5" },
             "display": {
@@ -381,8 +381,8 @@ mod tests {
 
         assert_eq!(config.schema_version, CONFIG_SCHEMA_VERSION);
         assert_eq!(config.stocks.len(), 1);
-        assert_eq!(config.stocks[0].symbol, "600756.SH");
-        assert_eq!(config.stocks[0].short_name, "浪潮");
+        assert_eq!(config.stocks[0].symbol, "600519.SH");
+        assert_eq!(config.stocks[0].short_name, "贵州茅台");
         assert!(config.stocks[0].position.is_some());
         assert_eq!(config.active_stock, 0);
         assert!(config.launch_at_login);

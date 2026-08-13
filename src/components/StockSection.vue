@@ -149,7 +149,7 @@ onBeforeUnmount(() => {
               "
               autocomplete="off"
               maxlength="32"
-              placeholder="输入股票名称或代码，例如：浪潮软件、600756"
+              placeholder="输入股票名称或代码，例如：贵州茅台、600519"
               @input="schedule"
               @focus="openSearch"
               @blur="closeSearch"

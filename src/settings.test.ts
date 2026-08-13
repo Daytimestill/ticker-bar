@@ -26,8 +26,8 @@ import {
 } from './settings'
 
 const INSPUR = {
-  symbol: '600756.SH',
-  name: '浪潮软件',
+  symbol: '600519.SH',
+  name: '贵州茅台',
   market: '沪市',
   currency: 'CNY',
 }
@@ -157,8 +157,8 @@ describe('settings model', () => {
     expect(added.index).toBe(1)
     expect(added.stocks).toHaveLength(2)
     expect(added.stocks[1]).toMatchObject({
-      symbol: '600756.SH',
-      shortName: '浪潮软件',
+      symbol: '600519.SH',
+      shortName: '贵州茅台',
       currency: 'CNY',
       position: null,
     })
@@ -193,20 +193,20 @@ describe('settings model', () => {
       market: '深市',
       currency: 'CNY',
     }).stocks
-    // [小米, 浪潮软件, 平安银行]，置顶浪潮软件（下标 1）
+    // [小米, 贵州茅台, 平安银行]，置顶贵州茅台（下标 1）
 
-    // 把平安银行挪到最前：置顶的浪潮软件下标顺移到 2，但仍是同一只
+    // 把平安银行挪到最前：置顶的贵州茅台下标顺移到 2，但仍是同一只
     const moved = moveStock(withThird, 1, 2, 0)
     expect(moved.stocks.map((stock) => stock.symbol)).toEqual([
       '000001.SZ',
       '01810.HK',
-      '600756.SH',
+      '600519.SH',
     ])
-    expect(moved.stocks[moved.activeStock].symbol).toBe('600756.SH')
+    expect(moved.stocks[moved.activeStock].symbol).toBe('600519.SH')
 
     // 拖动置顶项自身，置顶依旧跟随
     const movedActive = moveStock(withThird, 1, 1, 0)
-    expect(movedActive.stocks[movedActive.activeStock].symbol).toBe('600756.SH')
+    expect(movedActive.stocks[movedActive.activeStock].symbol).toBe('600519.SH')
     expect(movedActive.activeStock).toBe(0)
 
     // 越界与原地移动一律原样返回
@@ -221,7 +221,7 @@ describe('settings model', () => {
 
     const remaining = removeStock(two, 0)
     expect(remaining).toHaveLength(1)
-    expect(remaining[0].symbol).toBe('600756.SH')
+    expect(remaining[0].symbol).toBe('600519.SH')
 
     expect(() => removeStock(remaining, 0)).toThrowError('至少保留一只股票')
     expect(removeStock(two, 5)).toBe(two)
@@ -233,11 +233,11 @@ describe('settings model', () => {
 
     expect(firstPositionError(config.stocks)).toBeNull()
     const broken = upsertStock(config.stocks, INSPUR).stocks.map((stock) =>
-      stock.symbol === '600756.SH'
+      stock.symbol === '600519.SH'
         ? { ...stock, position: { quantity: 'abc', averageCost: '1' } }
         : stock,
     )
-    expect(firstPositionError(broken)).toBe('浪潮软件：持仓数量需要是非负数字')
+    expect(firstPositionError(broken)).toBe('贵州茅台：持仓数量需要是非负数字')
   })
 
   it('describes alert rules with stock name and percent suffix', () => {
@@ -335,7 +335,7 @@ describe('settings model', () => {
       customBody: null,
       lastTriggeredDay: null,
     }
-    const orphan: AlertRule = { ...keep, id: 'orphan', symbol: '600756.SH' }
+    const orphan: AlertRule = { ...keep, id: 'orphan', symbol: '600519.SH' }
 
     const remaining = pruneAlertsForStocks(
       [keep, orphan],

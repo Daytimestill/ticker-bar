@@ -317,6 +317,19 @@ mod tests {
 
     const TODAY: &str = "2026-08-05";
 
+    /// 默认文案断言「已≥ 阈值」，所以取值必须是真的满足条件的那个数。
+    /// 试发（commands::send_test_alert）正是为此固定传 rule.threshold——
+    /// 早先传当前行情值，休市时发出过「当前 -1.82%，已≥ 3.00%」这种自相矛盾的通知。
+    #[test]
+    fn body_never_claims_a_threshold_that_the_value_does_not_meet() {
+        let rule = rule(AlertMetric::ChangePercent, AlertComparator::Above, "3");
+        let stock = stock();
+
+        let notification = build_notification(&rule, &stock, rule.threshold);
+
+        assert_eq!(notification.body, "今日涨跌幅 当前 3.00%，已≥ 3.00%");
+    }
+
     #[test]
     fn fires_only_when_the_threshold_is_crossed() {
         let rule = rule(AlertMetric::Price, AlertComparator::Above, "30");

@@ -5,9 +5,8 @@ use time::{OffsetDateTime, UtcOffset};
 
 use crate::{
     AlertRule, AppConfig, CONFIG_SCHEMA_VERSION, ConnectionState, PortfolioSummary, ProviderKind,
-    StockSearchResult, TencentQuoteProvider,
-    alerts::{build_notification, metric_value},
-    render_tray_title, save_config, summarize_portfolio,
+    StockSearchResult, TencentQuoteProvider, alerts::build_notification, render_tray_title,
+    save_config, summarize_portfolio,
 };
 
 use super::{
@@ -83,7 +82,6 @@ pub(super) fn preview_portfolio(
 /// 休市时提醒本就不会触发——那份不动的收盘价会天天满足条件、反复轰炸，
 /// 所以判定只在交易中/延迟时进行。于是需要这个入口：它跳过穿越判定，
 /// 但文案组装、静默开关与发送路径都与真实触发完全一致。
-/// 指标值优先取当前缓存行情（休市时即最近收盘价），取不到就退回阈值本身。
 #[tauri::command]
 pub(super) fn send_test_alert(
     app: AppHandle,
@@ -100,19 +98,13 @@ pub(super) fn send_test_alert(
         .find(|stock| stock.symbol.trim() == rule.symbol.trim())
         .ok_or_else(|| format!("找不到股票 {}，请先保存设置", rule.symbol))?;
 
-    let value = state
-        .quotes
-        .read()
-        .ok()
-        .and_then(|quotes| {
-            quotes
-                .get(stock.symbol.trim())
-                .and_then(|update| metric_value(rule.metric, stock, update))
-        })
-        // 还没拿到行情时用阈值占位，至少能验证通知本身发得出去
-        .unwrap_or(rule.threshold);
-
-    let notification = build_notification(&rule, stock, value);
+    // 取值固定用阈值，不用当前行情。
+    //
+    // 默认文案是「当前 X，已≥ Y」——这句只有在真实触发那一刻才成立。
+    // 试发跳过穿越判定，此刻的行情多半离阈值还远，喂当前值就会发出
+    // 「当前 -1.82%，已≥ 3.00%」这种自相矛盾的通知。
+    // 用阈值等于模拟「刚刚触发」的瞬间，看到的正是将来真会收到的那条。
+    let notification = build_notification(&rule, stock, rule.threshold);
     send_notification(&app, &notification).map_err(|error| {
         format!("通知发送失败，请到 系统设置 → 通知 里允许 TickerBar 发送通知：{error}")
     })

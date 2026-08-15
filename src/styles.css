@@ -918,11 +918,11 @@ p {
   background: var(--accent-soft);
 }
 
+/* 下方间距交给后继元素各自声明，否则新建表单没法贴紧列表 */
 .alert-list {
   display: flex;
   flex-direction: column;
   gap: 7px;
-  margin-bottom: 14px;
 }
 
 .alert-row {
@@ -983,6 +983,35 @@ p {
   border-radius: 10px;
   background: var(--surface);
   padding: 4px 16px 16px;
+}
+
+/*
+ * 就地编辑：行与表单要读成一块完整卡片，中间不能有任何缝或线。
+ *
+ * margin-top 必须精确抵消 .alert-list 的 flex gap（7px）——
+ * 只抵消 1px 的话，剩下的缝里会同时露出行的下边框和表单的上边框，
+ * 看着就是一条突兀的接缝。两边的相接边框也一并去掉，
+ * 靠行的浅蓝底与表单的白底自然分界。
+ */
+.alert-form.is-inline {
+  margin-top: -7px;
+  border-top: 0;
+  border-color: var(--accent);
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.alert-row.is-editing {
+  border-color: var(--accent);
+  border-bottom: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  background: var(--accent-soft);
+}
+
+/* 新建表单接在列表后面，间距与规则之间的 7px 保持一致 */
+.alert-list + .alert-form {
+  margin-top: 7px;
 }
 
 .alert-form-head {
@@ -1376,7 +1405,7 @@ input.is-invalid:focus {
   display: flex;
   min-height: 20px;
   align-items: center;
-  margin-top: 10px;
+  margin-top: 14px;
   font-size: var(--font-small);
 }
 

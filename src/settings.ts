@@ -92,6 +92,21 @@ export interface RefreshStatus {
   lastError: string | null
 }
 
+/**
+ * 提醒规则的编辑草稿。与 AlertRule 的区别：没有 id/enabled/lastTriggeredDay
+ * 这些运行期字段，且自定义文案用空串而非 null——输入框绑不了 null。
+ */
+export interface AlertDraft {
+  symbol: string
+  metric: AlertMetric
+  comparator: AlertComparator
+  threshold: string
+  repeat: AlertRepeat
+  silent: boolean
+  customTitle: string
+  customBody: string
+}
+
 /** 窗口内提醒 Toast。key 由前端自增生成——同一条规则可以连着触发多次 */
 export interface AlertToast {
   key: number

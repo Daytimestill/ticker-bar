@@ -1312,6 +1312,36 @@ describe('TickerBar settings window', () => {
     expect(wrapper.find('[data-testid="alert-list"]').exists()).toBe(false)
   })
 
+  it('编辑表单就地展开在被编辑那一行的下面，而不是页面末尾', async () => {
+    const wrapper = mount(App)
+    await flushPromises()
+    await wrapper.get('[data-testid="nav-alerts"]').trigger('click')
+
+    // 建两条规则，编辑第一条——表单跑到列表末尾的话，中间会隔着第二条
+    for (const threshold of ['3', '5']) {
+      await wrapper.get('[data-testid="alert-create"]').trigger('click')
+      await wrapper.get('[data-testid="alert-threshold"]').setValue(threshold)
+      await wrapper.get('[data-testid="alert-submit"]').trigger('click')
+    }
+    const rows = wrapper.findAll('[data-testid^="alert-row-"]')
+    expect(rows).toHaveLength(2)
+
+    const firstId = rows[0].attributes('data-testid')!.replace('alert-row-', '')
+    await wrapper.get(`[data-testid="alert-edit-${firstId}"]`).trigger('click')
+
+    const form = wrapper.get('[data-testid="alert-form"]')
+    expect(form.attributes('class')).toContain('is-inline')
+    // 表单的前一个兄弟必须就是被编辑的那一行
+    expect(form.element.previousElementSibling).toBe(rows[0].element)
+    expect(rows[0].classes()).toContain('is-editing')
+
+    // 新建时没有归属的行，回到列表末尾且不带就地样式
+    await wrapper.get('[data-testid="alert-create"]').trigger('click')
+    const createForm = wrapper.get('[data-testid="alert-form"]')
+    expect(createForm.attributes('class')).not.toContain('is-inline')
+    expect(wrapper.find('.alert-row.is-editing').exists()).toBe(false)
+  })
+
   it('表单实时预览拼出来的规则，与列表里的描述同源', async () => {
     const wrapper = mount(App)
     await flushPromises()

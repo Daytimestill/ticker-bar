@@ -5,27 +5,14 @@ import {
   errorText,
   MAX_ALERTS,
   alertDraftError,
-  alertMetricOptions,
   describeAlert,
-  type AlertComparator,
-  type AlertMetric,
-  type AlertRepeat,
+  type AlertDraft,
   type AlertRule,
   type AppConfig,
 } from '../settings'
+import AlertForm from './AlertForm.vue'
 
 const props = defineProps<{ config: AppConfig }>()
-
-interface AlertDraft {
-  symbol: string
-  metric: AlertMetric
-  comparator: AlertComparator
-  threshold: string
-  repeat: AlertRepeat
-  silent: boolean
-  customTitle: string
-  customBody: string
-}
 
 function emptyDraft(): AlertDraft {
   return {
@@ -50,19 +37,6 @@ const formVisible = ref(false)
 const draftValidationError = computed(() =>
   alertDraftError(draft.value, props.config.stocks),
 )
-
-/**
- * 草稿的自然语言预览。四个字段散在表单里各填各的，
- * 拼起来到底是条什么规则，读一遍这句最快。
- * describeAlert 与列表里显示的是同一个函数，所见即所得。
- */
-const draftSummary = computed(() => {
-  if (!draft.value.threshold.trim()) return null
-  return describeAlert(
-    { ...draft.value, id: '', enabled: true, lastTriggeredDay: null },
-    props.config.stocks,
-  )
-})
 
 function startCreate() {
   draft.value = emptyDraft()
@@ -222,11 +196,10 @@ function ruleTags(rule: AlertRule): string[] {
     </div>
 
     <div v-if="config.alerts.length" class="alert-list" data-testid="alert-list">
+      <template v-for="rule in config.alerts" :key="rule.id">
       <div
-        v-for="rule in config.alerts"
-        :key="rule.id"
         class="alert-row"
-        :class="{ 'is-disabled': !rule.enabled }"
+        :class="{ 'is-disabled': !rule.enabled, 'is-editing': editingId === rule.id }"
         :data-testid="`alert-row-${rule.id}`"
       >
         <label class="alert-toggle">
@@ -272,7 +245,39 @@ function ruleTags(rule: AlertRule): string[] {
           </button>
         </div>
       </div>
+
+      <!--
+        编辑表单就地展开在被编辑那一行的正下方。
+        原来它固定渲染在页面最末尾，改第一条规则时表单出现在整个列表之后，
+        中间隔着一大截，看不出在改哪一条。
+      -->
+      <AlertForm
+        v-if="editingId === rule.id"
+        :draft="draft"
+        :stocks="config.stocks"
+        :editing="true"
+        :error="formError"
+        @submit="submitForm"
+        @cancel="cancelForm"
+      />
+      </template>
     </div>
+    <p v-if="!config.alerts.length" class="section-note">
+      还没有提醒规则。新建一条，例如「今日涨跌幅 ≥ 3%」或「持仓收益 ≤ -2000」，
+      触发时会弹出 macOS 系统通知
+    </p>
+
+    <!-- 新建表单没有归属的行，紧接在列表后面——排到试发反馈区之后会被顶开一大截 -->
+    <AlertForm
+      v-if="formVisible && !editingId"
+      :draft="draft"
+      :stocks="config.stocks"
+      :editing="false"
+      :error="formError"
+      @submit="submitForm"
+      @cancel="cancelForm"
+    />
+
     <!-- 常驻占位：提示出现/消失时不再把下方内容顶来顶去 -->
     <div v-if="config.alerts.length" class="alert-test-feedback" aria-live="polite">
       <span
@@ -288,174 +293,6 @@ function ruleTags(rule: AlertRule): string[] {
       <span v-else-if="testResult" class="success" data-testid="alert-test-result">
         {{ testResult }}
       </span>
-    </div>
-
-    <p v-if="!config.alerts.length" class="section-note">
-      还没有提醒规则。新建一条，例如「今日涨跌幅 ≥ 3%」或「持仓收益 ≤ -2000」，
-      触发时会弹出 macOS 系统通知
-    </p>
-
-    <div v-if="formVisible" class="alert-form" data-testid="alert-form">
-      <div class="alert-form-head">
-        <strong>{{ editingId ? '编辑提醒' : '新建提醒' }}</strong>
-        <!-- 四个字段拼起来到底是条什么规则，一句话摆在最上面 -->
-        <span v-if="draftSummary" class="alert-form-summary" data-testid="alert-draft-summary">
-          {{ draftSummary }}
-        </span>
-        <span v-else class="alert-form-summary is-empty">填写阈值后显示规则预览</span>
-      </div>
-
-      <div class="alert-field-group">
-        <span class="alert-group-label">触发条件</span>
-        <div class="alert-condition">
-          <label class="alert-field">
-            <span>股票</span>
-            <select v-model="draft.symbol" data-testid="alert-symbol">
-              <option
-                v-for="stock in config.stocks"
-                :key="stock.symbol"
-                :value="stock.symbol"
-              >
-                {{ stock.shortName || stock.symbol }} · {{ stock.symbol }}
-              </option>
-            </select>
-          </label>
-          <label class="alert-field">
-            <span>指标</span>
-            <select v-model="draft.metric" data-testid="alert-metric">
-              <option
-                v-for="option in alertMetricOptions"
-                :key="option.value"
-                :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-          </label>
-          <div class="alert-field">
-            <span>条件</span>
-            <div class="segmented-control">
-              <button
-                type="button"
-                :class="{ 'is-active': draft.comparator === 'above' }"
-                :aria-pressed="draft.comparator === 'above'"
-                data-testid="alert-comparator-above"
-                @click="draft.comparator = 'above'"
-              >
-                ≥ 达到或超过
-              </button>
-              <button
-                type="button"
-                :class="{ 'is-active': draft.comparator === 'below' }"
-                :aria-pressed="draft.comparator === 'below'"
-                data-testid="alert-comparator-below"
-                @click="draft.comparator = 'below'"
-              >
-                ≤ 达到或低于
-              </button>
-            </div>
-          </div>
-          <label class="alert-field">
-            <span>阈值</span>
-            <input
-              v-model.trim="draft.threshold"
-              data-testid="alert-threshold"
-              inputmode="decimal"
-              placeholder="例如 3 或 -2000"
-            />
-            <small class="field-hint">跌幅、亏损用负数</small>
-          </label>
-        </div>
-      </div>
-
-      <div class="alert-field-group">
-        <span class="alert-group-label">通知方式</span>
-        <div class="alert-field">
-          <span>触发频率</span>
-          <div class="segmented-control">
-            <button
-              type="button"
-              :class="{ 'is-active': draft.repeat === 'dailyOnce' }"
-              :aria-pressed="draft.repeat === 'dailyOnce'"
-              data-testid="alert-repeat-daily"
-              @click="draft.repeat = 'dailyOnce'"
-            >
-              每个交易日最多一次
-            </button>
-            <button
-              type="button"
-              :class="{ 'is-active': draft.repeat === 'once' }"
-              :aria-pressed="draft.repeat === 'once'"
-              data-testid="alert-repeat-once"
-              @click="draft.repeat = 'once'"
-            >
-              触发一次后停用
-            </button>
-          </div>
-        </div>
-        <label class="runtime-option alert-silent-row">
-          <input
-            v-model="draft.silent"
-            class="toggle-input"
-            type="checkbox"
-            data-testid="alert-silent"
-          />
-          <span class="runtime-copy">
-            <strong>静默通知</strong>
-            <small>只弹横幅不响铃，适合不方便发出声音的场合</small>
-          </span>
-        </label>
-      </div>
-
-      <div class="alert-field-group">
-        <span class="alert-group-label">
-          通知文案
-          <small>选填，填了就完全替换默认的行情文案</small>
-        </span>
-        <label class="alert-field">
-          <span>标题</span>
-          <input
-            v-model="draft.customTitle"
-            data-testid="alert-custom-title"
-            maxlength="40"
-            placeholder="例如：今天吃了三斤肉"
-          />
-        </label>
-        <label class="alert-field">
-          <span>正文</span>
-          <input
-            v-model="draft.customBody"
-            data-testid="alert-custom-body"
-            maxlength="80"
-            placeholder="留空则使用默认行情文案"
-          />
-        </label>
-      </div>
-
-      <p
-        v-if="formError"
-        class="error"
-        role="alert"
-        data-testid="alert-form-error"
-      >
-        {{ formError }}
-      </p>
-      <div class="alert-form-actions">
-        <button
-          type="button"
-          class="primary"
-          data-testid="alert-submit"
-          @click="submitForm"
-        >
-          {{ editingId ? '保存修改' : '添加规则' }}
-        </button>
-        <button type="button" class="ghost" @click="cancelForm">取消</button>
-      </div>
-      <p class="section-note">
-        触发采用「穿越」判定：建规则时若已满足条件不会立刻提醒，
-        待数值回落再次越过阈值才触发。休市期间不判定，避免不动的收盘价反复触发。
-        规则修改需点击右上角「保存设置」才生效
-      </p>
     </div>
 
     <!-- 常驻在页面最后：横幅去哪了是这一页最容易让人以为「提醒坏了」的地方 -->

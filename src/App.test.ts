@@ -236,6 +236,28 @@ describe('TickerBar settings window', () => {
     )
   })
 
+  it('uses a master-detail stock workspace with editing kept in the inspector', async () => {
+    const wrapper = mount(App)
+    await flushPromises()
+
+    const workbench = wrapper.get('[data-testid="stock-workbench"]')
+    const master = workbench.get('[data-testid="stock-master-pane"]')
+    const inspector = workbench.get('[data-testid="stock-inspector-pane"]')
+
+    expect(master.get('h3').text()).toBe('关注股票')
+    expect(master.find('[data-testid="stock-search-input"]').exists()).toBe(true)
+    expect(master.find('[data-testid="stock-list"]').exists()).toBe(true)
+
+    expect(inspector.get('h3').text()).toBe('当前股票')
+    expect(inspector.find('[data-testid="stock-short-name"]').exists()).toBe(
+      true,
+    )
+    expect(inspector.find('[data-testid="stock-currency"]').exists()).toBe(
+      true,
+    )
+    expect(inspector.text()).toContain('01810.HK')
+  })
+
   it('重新打开设置时停在上次待过的分区', async () => {
     const first = mount(App)
     await flushPromises()
@@ -366,19 +388,57 @@ describe('TickerBar settings window', () => {
     }
   })
 
-  it('置顶标记跟着股票名走，操作列宽度不随行变化', async () => {
+  it('菜单栏标记属于股票信息区，操作列宽度不随行变化', async () => {
     const wrapper = mount(App)
     await flushPromises()
     await wrapper.get('[data-testid="nav-stock"]').trigger('click')
 
     const row = wrapper.get('[data-testid="stock-row-01810.HK"]')
     const badge = row.get('[data-testid="active-stock-badge"]')
-    // 标记在股票名那一格里，不在末尾的操作列——否则两种行末列宽度不一会顶歪整行
-    expect(badge.element.closest('.stock-row-title')).not.toBeNull()
+    // 标记留在股票信息区，不塞进末尾操作列——否则两种行末列宽度不一会顶歪整行
+    expect(badge.element.closest('.stock-row')).not.toBeNull()
     expect(badge.element.closest('.stock-row-actions')).toBeNull()
     expect(row.find('.stock-row-actions').exists()).toBe(true)
-    // 行内说明只留中文币种名，代码已在旁边单独一列
-    expect(row.text()).toContain('港币行情')
+    expect(row.text()).toContain('01810.HK')
+  })
+
+  it('选中与未选中的股票使用相同列槽，状态和操作不会挤乱对齐', async () => {
+    const wrapper = mount(App)
+    await flushPromises()
+    vi.useFakeTimers()
+
+    try {
+      await wrapper.get('[data-testid="stock-search-input"]').setValue('贵州茅台')
+      await vi.advanceTimersByTimeAsync(300)
+      await flushPromises()
+      await wrapper
+        .get('[data-testid="stock-search-option-600519.SH"]')
+        .trigger('click')
+
+      const rows = wrapper.findAll('[data-testid^="stock-row-"]')
+      expect(rows).toHaveLength(2)
+      for (const row of rows) {
+        expect(row.find('.stock-row-drag-slot').exists()).toBe(true)
+        expect(row.find('.stock-row-status').exists()).toBe(true)
+        expect(row.find('.move-buttons').exists()).toBe(true)
+        expect(row.find('.stock-row-actions').exists()).toBe(true)
+      }
+
+      expect(
+        wrapper
+          .get('[data-testid="stock-row-600519.SH"]')
+          .find('.stock-row-status [data-testid="active-stock-badge"]')
+          .exists(),
+      ).toBe(true)
+      expect(
+        wrapper
+          .get('[data-testid="stock-row-01810.HK"]')
+          .find('.stock-row-actions [data-testid="stock-remove-01810.HK"]')
+          .exists(),
+      ).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('展示版本与构建时间，便于确认覆盖安装是否生效', async () => {
@@ -592,6 +652,53 @@ describe('TickerBar settings window', () => {
     ).toContain('is-selected')
   })
 
+  it('可以在显示卡片上暂停、恢复并直接删除数据项', async () => {
+    const wrapper = mount(App)
+    await flushPromises()
+
+    const lastPriceCard = () => wrapper.find('[data-testid="selected-lastPrice"]')
+    const enabledToggle = wrapper.get('[data-testid="metric-enabled-lastPrice"]')
+
+    await enabledToggle.setValue(false)
+    expect(lastPriceCard().exists()).toBe(true)
+    expect(lastPriceCard().classes()).toContain('is-disabled')
+    expect(lastPriceCard().text()).toContain('已暂停')
+
+    let previewCalls = invoke.mock.calls.filter(
+      ([command]) => command === 'preview_title',
+    )
+    expect(previewCalls.at(-1)?.[1]).toMatchObject({
+      config: {
+        display: {
+          items: expect.arrayContaining([
+            expect.objectContaining({ metric: 'lastPrice', enabled: false }),
+          ]),
+        },
+      },
+    })
+
+    await wrapper.get('[data-testid="metric-enabled-lastPrice"]').setValue(true)
+    expect(lastPriceCard().classes()).not.toContain('is-disabled')
+
+    await wrapper.get('[data-testid="metric-delete-lastPrice"]').trigger('click')
+    expect(lastPriceCard().exists()).toBe(false)
+    expect(
+      (wrapper.get('[data-testid="metric-lastPrice"]').element as HTMLInputElement)
+        .checked,
+    ).toBe(false)
+
+    previewCalls = invoke.mock.calls.filter(
+      ([command]) => command === 'preview_title',
+    )
+    expect(previewCalls.at(-1)?.[1]).toMatchObject({
+      config: {
+        display: {
+          items: [expect.objectContaining({ metric: 'dailyChangePercent' })],
+        },
+      },
+    })
+  })
+
   it('applies the position preset and persists the configuration', async () => {
     const wrapper = mount(App)
     await flushPromises()
@@ -614,6 +721,37 @@ describe('TickerBar settings window', () => {
       }),
     )
     expect(wrapper.text()).toContain('设置已保存')
+  })
+
+  it('提供总持仓收益展示项和一键预设', async () => {
+    const wrapper = mount(App)
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="metric-card-portfolioProfit"]').text()).toContain(
+      '总持仓收益',
+    )
+    expect(
+      wrapper.get('[data-testid="metric-card-portfolioReturnPercent"]').text(),
+    ).toContain('总持仓收益率')
+
+    await wrapper.get('[data-testid="preset-portfolio"]').trigger('click')
+
+    const previewCalls = invoke.mock.calls.filter(
+      ([command]) => command === 'preview_title',
+    )
+    expect(previewCalls.at(-1)?.[1]).toMatchObject({
+      config: {
+        display: {
+          items: [
+            expect.objectContaining({ metric: 'portfolioProfit', label: '总盈' }),
+            expect.objectContaining({
+              metric: 'portfolioReturnPercent',
+              label: '总率',
+            }),
+          ],
+        },
+      },
+    })
   })
 
   it('changes field order with buttons and pointer dragging', async () => {
@@ -1076,9 +1214,18 @@ describe('TickerBar settings window', () => {
     expect(total.get('[data-testid="position-total-CNY"]').text()).toContain(
       '+200.00',
     )
+    expect(total.text()).toContain('总收益')
+    expect(total.text()).toContain('收益率')
+    expect(total.text()).toContain('总市值')
+    expect(total.text()).toContain('总成本')
     // 合计要讲清楚是怎么算出来的、算了几只、差了几只
-    expect(total.text()).toContain('市值 6845.00 · 成本 9865.00')
-    expect(total.text()).toContain('收益 = Σ（现价 − 成本）× 数量')
+    expect(total.get('[data-testid="position-total-HKD"]').text()).toContain(
+      '总市值6845.00',
+    )
+    expect(total.get('[data-testid="position-total-HKD"]').text()).toContain(
+      '总成本9865.00',
+    )
+    expect(total.text()).toContain('收益按现价、成本和数量合计')
     expect(total.text()).toContain('合计收益 ÷ 合计成本')
     expect(total.text()).toContain('另有 1 只股票暂无行情，未计入')
   })
@@ -1368,11 +1515,11 @@ describe('TickerBar settings window', () => {
     await flushPromises()
     await wrapper.get('[data-testid="nav-alerts"]').trigger('click')
 
-    // 空列表状态最容易漏——用户还没建规则时就该知道横幅会去哪
+    // 空列表状态最容易漏——用户还没建规则时也要知道前后台分别显示在哪里
     expect(wrapper.find('[data-testid="alert-list"]').exists()).toBe(false)
     const note = wrapper.get('[data-testid="alert-delivery-note"]').text()
-    expect(note).toContain('桌面横幅')
-    expect(note).toContain('通知中心')
+    expect(note).toContain('系统横幅')
+    expect(note).toContain('窗口内提示')
   })
 
   it('提醒触发时在窗口内弹 Toast，点一下关掉', async () => {
@@ -1525,7 +1672,7 @@ describe('TickerBar settings window', () => {
     expect(wrapper.find('[data-testid="alert-list"]').exists()).toBe(false)
   })
 
-  it('系统设置只保留真正生效的开关，不留看似可用的摆设', async () => {
+  it('系统设置提供登录启动与全局快捷键配置', async () => {
     const wrapper = mount(App)
     await flushPromises()
     await wrapper.get('[data-testid="nav-system"]').trigger('click')
@@ -1534,9 +1681,34 @@ describe('TickerBar settings window', () => {
     const runtimeOptions = runtimeSettings.findAll('.runtime-option')
 
     expect(runtimeSettings.text()).toContain('运行选项')
-    expect(runtimeOptions).toHaveLength(1)
+    expect(runtimeOptions).toHaveLength(2)
     expect(runtimeOptions[0].find('input.toggle-input').exists()).toBe(true)
     expect(runtimeOptions[0].find('.runtime-copy').exists()).toBe(true)
+    expect(
+      (wrapper.get('[data-testid="quick-view-enabled"]').element as HTMLInputElement)
+        .checked,
+    ).toBe(true)
+    expect(
+      (wrapper.get('[data-testid="quick-view-shortcut"]').element as HTMLSelectElement)
+        .value,
+    ).toBe('Control+Command+T')
+    expect(
+      (wrapper.get('[data-testid="quick-view-sort"]').element as HTMLSelectElement)
+        .value,
+    ).toBe('positionFirst')
+    expect(runtimeSettings.text()).toContain('⌃⌘T')
+    expect(runtimeSettings.find('.shortcut-grid').exists()).toBe(true)
+    expect(runtimeSettings.text()).toContain('组内顺序跟随股票页')
+
+    await wrapper.get('[data-testid="quick-view-sort"]').setValue('stockOrder')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(invoke).toHaveBeenCalledWith(
+      'save_user_config',
+      expect.objectContaining({
+        config: expect.objectContaining({ quickViewSort: 'stockOrder' }),
+      }),
+    )
 
     // 「扩展时段」始终无法生效，已整体移除而不是继续禁用着占位
     expect(

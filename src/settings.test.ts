@@ -12,14 +12,17 @@ import {
   firstPositionError,
   hasAnyNumericOption,
   metricCapability,
+  metricOptions,
   moveMetric,
   moveStock,
   positionFromInput,
   positionInputError,
   pruneAlertsForStocks,
   pushToast,
+  recommendedMetric,
   MAX_TOASTS,
   removeStock,
+  setMetricEnabled,
   toggleMetric,
   upsertStock,
   type AlertRule,
@@ -38,6 +41,8 @@ describe('settings model', () => {
 
     expect(config.provider).toBe('tencent')
     expect(config.trayThrottleMs).toBe(3_000)
+    expect(config.quickViewEnabled).toBe(true)
+    expect(config.quickViewShortcut).toBe('Control+Command+T')
     expect(config.display.items.map((item) => item.metric)).toEqual([
       'lastPrice',
       'dailyChangePercent',
@@ -55,6 +60,7 @@ describe('settings model', () => {
 
     expect(config.display.items.at(-1)).toMatchObject({
       metric: 'positionProfit',
+      enabled: true,
       precision: 0,
       showSign: true,
       directionArrow: false,
@@ -104,6 +110,34 @@ describe('settings model', () => {
     ])
   })
 
+  it('offers total portfolio metrics with a compact preset', () => {
+    expect(
+      metricOptions
+        .filter((option) => option.metric.startsWith('portfolio'))
+        .map((option) => option.label),
+    ).toEqual(['总持仓收益', '总持仓收益率'])
+
+    expect(recommendedMetric('portfolioProfit')).toMatchObject({
+      precision: 0,
+      showSign: true,
+      directionArrow: false,
+      compactStyle: 'chinese',
+      label: '总盈',
+    })
+    expect(recommendedMetric('portfolioReturnPercent')).toMatchObject({
+      precision: 2,
+      showSign: false,
+      directionArrow: true,
+      compactStyle: 'none',
+      label: '总率',
+    })
+
+    expect(applyPreset('portfolio').map((item) => item.metric)).toEqual([
+      'portfolioProfit',
+      'portfolioReturnPercent',
+    ])
+  })
+
   it('does not allow removing the final visible metric', () => {
     const config = createDefaultConfig()
     config.display.items = applyPreset('price')
@@ -111,6 +145,34 @@ describe('settings model', () => {
     expect(() =>
       toggleMetric(config.display.items, 'lastPrice', false),
     ).toThrowError('至少保留一个菜单栏数据项')
+  })
+
+  it('pauses and resumes a metric without losing its formatting', () => {
+    const items = applyPreset('priceChange')
+    items[0].precision = 3
+
+    const paused = setMetricEnabled(items, 'lastPrice', false)
+    expect(paused[0]).toMatchObject({ enabled: false, precision: 3 })
+    expect(paused[1].enabled).toBe(true)
+
+    expect(() =>
+      setMetricEnabled(paused, 'dailyChangePercent', false),
+    ).toThrowError('至少启用一个菜单栏数据项')
+
+    const resumed = setMetricEnabled(paused, 'lastPrice', true)
+    expect(resumed[0]).toMatchObject({ enabled: true, precision: 3 })
+  })
+
+  it('does not delete the final enabled metric while paused items remain', () => {
+    const paused = setMetricEnabled(
+      applyPreset('priceChange'),
+      'lastPrice',
+      false,
+    )
+
+    expect(() =>
+      toggleMetric(paused, 'dailyChangePercent', false),
+    ).toThrowError('至少启用一个菜单栏数据项')
   })
 
   it('keeps toggling a missing metric off as a no-op', () => {

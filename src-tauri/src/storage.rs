@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::AppConfig;
+use crate::{AppConfig, CONFIG_SCHEMA_VERSION};
 
 pub fn load_config(path: &Path) -> Result<Option<AppConfig>, StorageError> {
     if !path.exists() {
@@ -16,6 +16,23 @@ pub fn load_config(path: &Path) -> Result<Option<AppConfig>, StorageError> {
         path: path.to_owned(),
         source,
     })?;
+    let json: serde_json::Value =
+        serde_json::from_str(&contents).map_err(|source| StorageError::Parse {
+            path: path.to_owned(),
+            source,
+        })?;
+    if let Some(found) = json
+        .get("schemaVersion")
+        .and_then(serde_json::Value::as_u64)
+        && found > u64::from(CONFIG_SCHEMA_VERSION)
+    {
+        return Err(StorageError::UnsupportedSchema {
+            path: path.to_owned(),
+            found: u32::try_from(found).unwrap_or(u32::MAX),
+            supported: CONFIG_SCHEMA_VERSION,
+        });
+    }
+
     let config =
         crate::config::parse_config_json(&contents).map_err(|source| StorageError::Parse {
             path: path.to_owned(),
@@ -61,6 +78,14 @@ pub fn save_config(path: &Path, config: &AppConfig) -> Result<(), StorageError> 
             path: temporary_path.clone(),
             source,
         })?;
+    if path.exists() {
+        let backup_path = path.with_extension("json.bak");
+        fs::copy(path, &backup_path).map_err(|source| StorageError::Backup {
+            from: path.to_owned(),
+            to: backup_path,
+            source,
+        })?;
+    }
     fs::rename(&temporary_path, path).map_err(|source| StorageError::Commit {
         from: temporary_path,
         to: path.to_owned(),
@@ -78,6 +103,11 @@ pub enum StorageError {
         path: PathBuf,
         source: serde_json::Error,
     },
+    UnsupportedSchema {
+        path: PathBuf,
+        found: u32,
+        supported: u32,
+    },
     Invalid(crate::DomainError),
     MissingParent {
         path: PathBuf,
@@ -89,6 +119,11 @@ pub enum StorageError {
     Serialize(serde_json::Error),
     Write {
         path: PathBuf,
+        source: std::io::Error,
+    },
+    Backup {
+        from: PathBuf,
+        to: PathBuf,
         source: std::io::Error,
     },
     Commit {
@@ -107,6 +142,15 @@ impl fmt::Display for StorageError {
             Self::Parse { path, source } => {
                 write!(formatter, "failed to parse {}: {source}", path.display())
             }
+            Self::UnsupportedSchema {
+                path,
+                found,
+                supported,
+            } => write!(
+                formatter,
+                "newer config schema {found} at {} is not supported by this app (maximum {supported}); update TickerBar instead of overwriting the config",
+                path.display()
+            ),
             Self::Invalid(source) => write!(formatter, "invalid config: {source}"),
             Self::MissingParent { path } => {
                 write!(formatter, "config path has no parent: {}", path.display())
@@ -122,6 +166,12 @@ impl fmt::Display for StorageError {
             Self::Write { path, source } => {
                 write!(formatter, "failed to write {}: {source}", path.display())
             }
+            Self::Backup { from, to, source } => write!(
+                formatter,
+                "failed to back up {} to {}: {source}",
+                from.display(),
+                to.display()
+            ),
             Self::Commit { from, to, source } => write!(
                 formatter,
                 "failed to commit {} to {}: {source}",
@@ -138,9 +188,11 @@ impl Error for StorageError {
             Self::Read { source, .. }
             | Self::CreateDirectory { source, .. }
             | Self::Write { source, .. }
+            | Self::Backup { source, .. }
             | Self::Commit { source, .. } => Some(source),
             Self::Parse { source, .. } => Some(source),
             Self::Invalid(source) => Some(source),
+            Self::UnsupportedSchema { .. } => None,
             Self::Serialize(source) => Some(source),
             Self::MissingParent { .. } => None,
         }

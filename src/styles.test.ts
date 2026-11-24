@@ -31,19 +31,95 @@ describe('settings layout wrapping rules', () => {
 
   it('uses a two-pane application shell and an asymmetric display workbench', () => {
     expect(stylesheet).toMatch(
-      /\.settings-layout\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*190px\s+minmax\(0,\s*1fr\);/s,
+      /\.settings-layout\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*204px\s+minmax\(0,\s*1fr\);/s,
     )
     expect(stylesheet).toMatch(
       /\.display-workbench\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0,\s*1\.6fr\)\s+minmax\(260px,\s*1fr\);/s,
     )
   })
 
+  it('uses the approved graphite visual system instead of light cards', () => {
+    expect(stylesheet).toMatch(/--canvas:\s*#111217;/)
+    expect(stylesheet).toMatch(/--surface:\s*rgb\(255 255 255 \/ 4%\);/)
+    expect(stylesheet).toMatch(/--accent:\s*#7c73f1;/)
+    expect(stylesheet).toMatch(
+      /\.settings-shell\s*\{[^}]*background:[^;}]*radial-gradient[^;}]*linear-gradient/s,
+    )
+    expect(stylesheet).toMatch(
+      /\.workspace-header\s*\{[^}]*backdrop-filter:\s*blur\(24px\)\s+saturate\(130%\);/s,
+    )
+  })
+
+  it('gives the stock page a master list and a dedicated inspector', () => {
+    expect(stylesheet).toMatch(
+      /\.stock-workbench\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0,\s*1\.45fr\)\s+minmax\(300px,\s*0\.9fr\);/s,
+    )
+    expect(stylesheet).toMatch(
+      /\.stock-inspector-pane\s*\{[^}]*border-left:\s*1px\s+solid\s+var\(--line\);/s,
+    )
+  })
+
+  it('uses workspace container queries at the real minimum window width', () => {
+    expect(stylesheet).toMatch(
+      /\.settings-workspace\s*\{[^}]*container-type:\s*inline-size;[^}]*container-name:\s*settings-workspace;/s,
+    )
+    expect(stylesheet).toMatch(
+      /@container settings-workspace \(max-width:\s*720px\)[\s\S]*?\.stock-workbench\s*\{[^}]*grid-template-columns:\s*1fr;/,
+    )
+    expect(stylesheet).toMatch(
+      /@container settings-workspace \(max-width:\s*720px\)[\s\S]*?\.display-workbench\s*\{[^}]*grid-template-columns:\s*1fr;/,
+    )
+    expect(stylesheet).toMatch(
+      /@container settings-workspace \(max-width:\s*620px\)[\s\S]*?\.alert-row\s*\{[^}]*grid-template-columns:\s*auto\s+minmax\(0,\s*1fr\);/,
+    )
+  })
+
+  it('keeps every stock row on the same six-column track', () => {
+    expect(stylesheet).toMatch(
+      /\.stock-row\s*\{[^}]*grid-template-columns:\s*24px\s+minmax\(90px,\s*1fr\)\s+46px\s+52px\s+56px\s+42px;/s,
+    )
+    expect(stylesheet).not.toMatch(/\.stock-row-actions:empty\s*\{[^}]*display:\s*none;/s)
+  })
+
+  it('balances portfolio totals as a full-width metric grid', () => {
+    expect(stylesheet).toMatch(
+      /\.position-total-item\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(100px,\s*0\.8fr\)\s+repeat\(4,\s*minmax\(100px,\s*1fr\)\);/s,
+    )
+    expect(stylesheet).toMatch(
+      /\.position-total-metric\s*\{[^}]*min-width:\s*0;[^}]*border-left:\s*1px\s+solid\s+var\(--line\);/s,
+    )
+  })
+
   it('uses one readable type and control-size system', () => {
     expect(stylesheet).toMatch(/--font-body:\s*13px;/)
-    expect(stylesheet).toMatch(/--control-height:\s*40px;/)
-    expect(stylesheet).toMatch(/--control-height-compact:\s*34px;/)
+    expect(stylesheet).toMatch(/--control-height:\s*36px;/)
+    expect(stylesheet).toMatch(/--control-height-compact:\s*30px;/)
     expect(stylesheet).toMatch(
       /select\s*\{[^}]*appearance:\s*none;[^}]*background-image:\s*url\(/s,
+    )
+  })
+
+  it('uses a compact density scale without shrinking the body text', () => {
+    expect(stylesheet).toMatch(
+      /\.workspace-header\s*\{[^}]*height:\s*88px;[^}]*padding:\s*18px\s+24px\s+14px;/s,
+    )
+    expect(stylesheet).toMatch(
+      /\.workspace-scroll\s*\{[^}]*height:\s*calc\(100vh\s*-\s*88px\);[^}]*padding:\s*12px\s+24px\s+24px;/s,
+    )
+    expect(stylesheet).toMatch(
+      /\.preview-card\s*\{[^}]*min-height:\s*48px;/s,
+    )
+    expect(stylesheet).toMatch(
+      /\.stock-row\s*\{[^}]*min-height:\s*58px;/s,
+    )
+    expect(stylesheet).toMatch(
+      /\.item-summary\s*\{[^}]*min-height:\s*52px;/s,
+    )
+    expect(stylesheet).toMatch(
+      /\.runtime-option\s*\{[^}]*min-height:\s*54px;/s,
+    )
+    expect(stylesheet).toMatch(
+      /\.position-row > label\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*54px\s+minmax\(0,\s*1fr\);/s,
     )
   })
 

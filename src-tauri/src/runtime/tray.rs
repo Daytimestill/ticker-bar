@@ -9,8 +9,8 @@ use tauri::{
 use tauri_plugin_autostart::ManagerExt;
 
 use crate::{
-    ConnectionState, PortfolioTotal, ProviderUpdate, StockConfig, render_tray_title, save_config,
-    summarize_portfolio,
+    ConnectionState, PortfolioTotal, ProviderUpdate, StockConfig, render_tray_title_with_portfolio,
+    save_config, summarize_portfolio,
 };
 
 use super::{
@@ -200,12 +200,16 @@ pub(super) fn update_tray(app: &AppHandle) -> Result<(), String> {
 
     let active = config.active();
     let active_update = active.and_then(|stock| quotes.get(stock.symbol.trim()));
+    let summary = summarize_portfolio(&config.stocks, |symbol| {
+        quotes.get(symbol).map(|update| &update.quote)
+    });
     let title = match (active, active_update) {
         (Some(stock), Some(update)) => {
             let connection = display_connection(transport, Some(update.connection));
-            render_tray_title(
+            render_tray_title_with_portfolio(
                 &update.quote,
                 stock.position.as_ref(),
+                &summary,
                 &config.display,
                 &connection,
             )
@@ -227,9 +231,6 @@ pub(super) fn update_tray(app: &AppHandle) -> Result<(), String> {
         .map(|status| refresh_tooltip(&status))
         .unwrap_or_else(|_| "TickerBar".to_owned());
 
-    let summary = summarize_portfolio(&config.stocks, |symbol| {
-        quotes.get(symbol).map(|update| &update.quote)
-    });
     let total_label = portfolio_menu_label(&summary.totals, summary.missing_quotes);
 
     let tray = app

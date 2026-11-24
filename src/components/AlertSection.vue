@@ -264,8 +264,7 @@ function ruleTags(rule: AlertRule): string[] {
       </template>
     </div>
     <p v-if="!config.alerts.length" class="section-note">
-      还没有提醒规则。新建一条，例如「今日涨跌幅 ≥ 3%」或「持仓收益 ≤ -2000」，
-      触发时会弹出 macOS 系统通知
+      暂无规则。可按价格、涨跌幅或持仓收益创建系统通知
     </p>
 
     <!-- 新建表单没有归属的行，紧接在列表后面——排到试发反馈区之后会被顶开一大截 -->
@@ -298,9 +297,8 @@ function ruleTags(rule: AlertRule): string[] {
 
     <!-- 常驻在页面最后：横幅去哪了是这一页最容易让人以为「提醒坏了」的地方 -->
     <p class="section-note" data-testid="alert-delivery-note">
-      <strong>通知去向</strong>：窗口关闭时弹桌面横幅；窗口停在最前台时
-      macOS 不弹横幅，通知进通知中心，改由右上角卡片提示。
-      试发倒数 {{ TEST_DELAY_SECONDS }} 秒，便于切走窗口验证横幅
+      <strong>通知去向</strong>：后台时显示系统横幅，前台时显示窗口内提示。
+      试发延迟 {{ TEST_DELAY_SECONDS }} 秒
     </p>
   </section>
 </template>

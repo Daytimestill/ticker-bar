@@ -7,6 +7,8 @@ import {
   firstAlertError,
   firstPositionError,
   pushToast,
+  quickViewShortcutOptions,
+  quickViewSortOptions,
   type AlertToast,
   type AppConfig,
   type PortfolioSummary,
@@ -102,7 +104,7 @@ const settingsSections = [
   {
     id: 'system',
     title: '系统设置',
-    subtitle: '控制 TickerBar 在 macOS 中的启动方式',
+    subtitle: '控制 TickerBar 的启动方式与全局快捷键',
   },
 ] as const
 
@@ -590,7 +592,7 @@ onMounted(() => {
             <div data-testid="runtime-settings" class="runtime-settings">
               <div class="section-label">
                 <h3>运行选项</h3>
-                <p>这些设置控制应用在 macOS 中的行为</p>
+                <p>启动与快捷访问</p>
               </div>
               <div class="runtime-options">
                 <label class="runtime-option">
@@ -601,9 +603,61 @@ onMounted(() => {
                   />
                   <span class="runtime-copy">
                     <strong>登录时启动</strong>
-                    <small>进入 macOS 后自动恢复菜单栏行情</small>
+                    <small>登录后自动恢复菜单栏行情</small>
                   </span>
                 </label>
+                <div class="runtime-option quick-view-option">
+                  <input
+                    v-model="config.quickViewEnabled"
+                    id="quick-view-enabled"
+                    class="toggle-input"
+                    data-testid="quick-view-enabled"
+                    type="checkbox"
+                  />
+                  <div class="runtime-copy">
+                    <label for="quick-view-enabled">
+                      <strong>全局快捷键速览</strong>
+                      <small>随时唤出行情面板，失焦自动隐藏</small>
+                    </label>
+                    <div class="shortcut-grid">
+                      <label class="shortcut-picker">
+                        <span>快捷键</span>
+                        <select
+                          v-model="config.quickViewShortcut"
+                          data-testid="quick-view-shortcut"
+                          :disabled="!config.quickViewEnabled"
+                        >
+                          <option
+                            v-for="option in quickViewShortcutOptions"
+                            :key="option.value"
+                            :value="option.value"
+                          >
+                            {{ option.label }}
+                          </option>
+                        </select>
+                      </label>
+                      <label class="shortcut-picker">
+                        <span>排列</span>
+                        <select
+                          v-model="config.quickViewSort"
+                          data-testid="quick-view-sort"
+                          :disabled="!config.quickViewEnabled"
+                        >
+                          <option
+                            v-for="option in quickViewSortOptions"
+                            :key="option.value"
+                            :value="option.value"
+                          >
+                            {{ option.label }}
+                          </option>
+                        </select>
+                      </label>
+                    </div>
+                    <small class="quick-view-order-note">
+                      “持仓优先”只调整分组，组内顺序跟随股票页
+                    </small>
+                  </div>
+                </div>
               </div>
             </div>
           </section>

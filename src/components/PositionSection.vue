@@ -44,7 +44,7 @@ const countedCount = computed(() => props.summary?.rows.length ?? 0)
 /** 按需拼接说明：句子之间用句号分隔，末句不带——省得条件分支各自处理标点。 */
 const totalExplanation = computed(() => {
   const parts = [
-    '收益 = Σ（现价 − 成本）× 数量，收益率 = 合计收益 ÷ 合计成本（按仓位加权，不是各股收益率的平均）',
+    '收益按现价、成本和数量合计；收益率 = 合计收益 ÷ 合计成本（按成本加权）',
   ]
   if (totals.value.length > 1) {
     parts.push('不同币种分开统计，不做汇率换算')
@@ -92,8 +92,7 @@ function toneOf(value: string): 'up' | 'down' | 'flat' {
 <template>
   <section class="settings-page" data-testid="page-position">
     <p class="section-note">
-      填写数量与平均成本即开始计算该股票的收益，两项都留空表示不计算。
-      所有持仓数据仅保存在本机，不读取券商资产
+      填写数量和成本即可计算；全部留空则不计算。持仓数据仅保存在本机
     </p>
 
     <div class="position-list" data-testid="position-list">
@@ -195,17 +194,30 @@ function toneOf(value: string): 'up' | 'down' | 'flat' {
           class="position-total-item"
           :data-testid="`position-total-${total.currency}`"
         >
-          <span>{{ currencyLabel(total.currency) }}</span>
-          <strong :class="`tone-${toneOf(total.unrealizedProfit)}`">
-            {{ signedAmount(total.unrealizedProfit) }}
-          </strong>
-          <small>
-            收益率 {{ signedPercent(total.returnPercent) }}
-          </small>
-          <small>
-            市值 {{ Number(total.marketValue).toFixed(2) }} · 成本
-            {{ Number(total.costBasis).toFixed(2) }}
-          </small>
+          <div class="position-total-currency">
+            <span>计价币种</span>
+            <strong>{{ currencyLabel(total.currency) }}</strong>
+          </div>
+          <div class="position-total-metric">
+            <span>总收益</span>
+            <strong :class="`tone-${toneOf(total.unrealizedProfit)}`">
+              {{ signedAmount(total.unrealizedProfit) }}
+            </strong>
+          </div>
+          <div class="position-total-metric">
+            <span>收益率</span>
+            <strong :class="`tone-${toneOf(total.returnPercent)}`">
+              {{ signedPercent(total.returnPercent) }}
+            </strong>
+          </div>
+          <div class="position-total-metric">
+            <span>总市值</span>
+            <strong>{{ Number(total.marketValue).toFixed(2) }}</strong>
+          </div>
+          <div class="position-total-metric">
+            <span>总成本</span>
+            <strong>{{ Number(total.costBasis).toFixed(2) }}</strong>
+          </div>
         </div>
       </div>
       <p v-else class="section-note" data-testid="position-total-pending">

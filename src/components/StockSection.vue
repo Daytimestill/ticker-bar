@@ -2,7 +2,6 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import {
   MAX_STOCKS,
-  currencyName,
   currencyOptions,
   errorText,
   moveStock,
@@ -120,15 +119,19 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="settings-page" data-testid="page-stock">
-    <div class="page-toolbar">
-      <span class="page-kicker">行情来源</span>
-      <span class="status-pill">腾讯行情 · 无需密钥</span>
-    </div>
-    <div class="form-section">
-      <div class="form-grid">
+  <section class="settings-page stock-page" data-testid="page-stock">
+    <div class="stock-workbench" data-testid="stock-workbench">
+      <div class="stock-master-pane" data-testid="stock-master-pane">
+        <header class="stock-pane-heading">
+          <div>
+            <h3>关注股票</h3>
+            <span>{{ config.stocks.length }} / {{ MAX_STOCKS }}</span>
+          </div>
+          <span class="status-pill">腾讯行情 · 无需密钥</span>
+        </header>
+
         <div class="stock-picker">
-          <label for="stock-search">添加股票</label>
+          <label class="sr-only" for="stock-search">添加股票</label>
           <div class="stock-search-control">
             <svg viewBox="0 0 20 20" aria-hidden="true">
               <circle cx="8.5" cy="8.5" r="5.25" />
@@ -213,54 +216,59 @@ onBeforeUnmount(() => {
             @click="activate(index)"
             @keydown.enter.prevent="activate(index)"
           >
-            <span
-              v-if="config.stocks.length > 1"
-              class="drag-handle"
-              aria-hidden="true"
-              :data-testid="`stock-drag-${stock.symbol}`"
-              @click.stop
-              @pointerdown.stop="beginPointerDrag(index, $event)"
-              @pointermove="movePointerDrag"
-              @pointerup="finishPointerDrag"
-              @pointercancel="cancelPointerDrag"
-            >
-              ⠿
+            <span class="stock-row-drag-slot">
+              <span
+                v-if="config.stocks.length > 1"
+                class="drag-handle"
+                aria-hidden="true"
+                :data-testid="`stock-drag-${stock.symbol}`"
+                @click.stop
+                @pointerdown.stop="beginPointerDrag(index, $event)"
+                @pointermove="movePointerDrag"
+                @pointerup="finishPointerDrag"
+                @pointercancel="cancelPointerDrag"
+              >
+                ⠿
+              </span>
             </span>
-            <span class="market-token">{{ marketOf(stock.symbol) }}</span>
             <span class="stock-result-name">
               <span class="stock-row-title">
                 <strong>{{ stock.shortName || '未命名股票' }}</strong>
-                <!-- 置顶标记跟着股票名走：放在操作列会让两种行宽度不一，把整列顶歪 -->
-                <span
-                  v-if="index === config.activeStock"
-                  class="stock-row-badge"
-                  data-testid="active-stock-badge"
-                >
-                  菜单栏显示
-                </span>
               </span>
-              <small>{{ currencyName(stock.currency) }}行情</small>
+              <small>{{ stock.symbol }}</small>
             </span>
-            <code>{{ stock.symbol }}</code>
-            <div v-if="config.stocks.length > 1" class="move-buttons">
-              <button
-                type="button"
-                :aria-label="`上移 ${stock.shortName || stock.symbol}`"
-                :data-testid="`stock-move-up-${stock.symbol}`"
-                :disabled="index === 0"
-                @click.stop="reorder(index, index - 1)"
+            <span class="market-token">{{ marketOf(stock.symbol) }}</span>
+            <!-- 状态与操作各占固定列，选中与未选中时后续列不会横向跳动。 -->
+            <span class="stock-row-status">
+              <span
+                v-if="index === config.activeStock"
+                class="stock-row-badge"
+                data-testid="active-stock-badge"
               >
-                ↑
-              </button>
-              <button
-                type="button"
-                :aria-label="`下移 ${stock.shortName || stock.symbol}`"
-                :data-testid="`stock-move-down-${stock.symbol}`"
-                :disabled="index === config.stocks.length - 1"
-                @click.stop="reorder(index, index + 1)"
-              >
-                ↓
-              </button>
+                菜单栏
+              </span>
+            </span>
+            <div class="move-buttons">
+              <template v-if="config.stocks.length > 1">
+                <button
+                  type="button"
+                  :aria-label="`上移 ${stock.shortName || stock.symbol}`"
+                  :data-testid="`stock-move-up-${stock.symbol}`"
+                  :disabled="index === 0"
+                  @click.stop="reorder(index, index - 1)"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  :aria-label="`下移 ${stock.shortName || stock.symbol}`"
+                  :data-testid="`stock-move-down-${stock.symbol}`"
+                  :disabled="index === config.stocks.length - 1"
+                  @click.stop="reorder(index, index + 1)"
+                >
+                  ↓
+                </button>
+              </template>
             </div>
             <span class="stock-row-actions">
               <button
@@ -271,7 +279,7 @@ onBeforeUnmount(() => {
                 :data-testid="`stock-remove-${stock.symbol}`"
                 @click.stop="remove(index)"
               >
-                移除
+                删除
               </button>
             </span>
           </div>
@@ -285,9 +293,27 @@ onBeforeUnmount(() => {
           </p>
         </div>
 
-        <template v-if="active">
+        <p class="stock-order-hint">
+          拖动调整顺序，点击切换菜单栏股票。
+        </p>
+      </div>
+
+      <aside
+        v-if="active"
+        class="stock-inspector-pane"
+        data-testid="stock-inspector-pane"
+      >
+        <header class="stock-pane-heading inspector-heading">
+          <div>
+            <h3>当前股票</h3>
+            <span>{{ active.symbol }}</span>
+          </div>
+          <span class="inspector-state"><i aria-hidden="true"></i> 菜单栏显示中</span>
+        </header>
+
+        <div class="inspector-fields">
           <label>
-            <span>菜单栏简称</span>
+            <span>股票名称</span>
             <input
               data-testid="stock-short-name"
               v-model.trim="active.shortName"
@@ -319,16 +345,16 @@ onBeforeUnmount(() => {
               </option>
             </select>
             <small class="field-hint">
-              添加股票时按市场自动识别，仅用于持仓收益的币种归类，通常无需修改
+              已按市场识别，仅用于持仓收益的币种归类。
             </small>
           </label>
-        </template>
-      </div>
-      <p class="section-note">
-        点击列表中的股票可切换菜单栏显示；拖动左侧手柄或使用箭头可调整顺序，
-        列表顺序即菜单栏下拉里的顺序。
-        当前版本查询腾讯行情报价，不读取券商账户，也不会申请交易权限
-      </p>
+        </div>
+
+        <div class="inspector-note">
+          <strong>本机数据</strong>
+          <p>名称用于菜单栏，货币用于收益归类。不会连接券商或申请交易权限。</p>
+        </div>
+      </aside>
     </div>
   </section>
 </template>

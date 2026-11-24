@@ -5,16 +5,18 @@ use time::{OffsetDateTime, UtcOffset};
 
 use crate::{
     AlertRule, AppConfig, CONFIG_SCHEMA_VERSION, ConnectionState, PortfolioSummary, ProviderKind,
-    StockSearchResult, TencentQuoteProvider, alerts::build_notification, render_tray_title,
-    save_config, summarize_portfolio,
+    QuickViewSnapshot, StockSearchResult, TencentQuoteProvider, alerts::build_notification,
+    build_quick_view_snapshot, render_tray_title_with_portfolio, save_config, summarize_portfolio,
 };
 
 use super::{
     MAX_REFRESH_INTERVAL_MS, MIN_REFRESH_INTERVAL_MS, RefreshStatus, RuntimeState,
     alert_dispatch::send_notification,
     current_timestamp, display_connection,
+    macos_hotkey::rebind_quick_view_shortcut,
+    quick_view_window::hide_quick_view as hide_quick_view_window,
     refresh::refresh_once,
-    tray::{configure_launch_at_login, update_tray},
+    tray::{configure_launch_at_login, show_settings, update_tray},
 };
 
 #[tauri::command]
@@ -24,6 +26,46 @@ pub(super) fn get_config(state: State<'_, RuntimeState>) -> Result<AppConfig, St
         .read()
         .map(|config| config.clone())
         .map_err(|_| "无法读取设置：内部状态已损坏".to_owned())
+}
+
+#[tauri::command]
+pub(super) fn get_quick_view_snapshot(
+    state: State<'_, RuntimeState>,
+) -> Result<QuickViewSnapshot, String> {
+    let config = state
+        .config
+        .read()
+        .map_err(|_| "无法读取速览：设置状态已损坏".to_owned())?;
+    let quotes = state
+        .quotes
+        .read()
+        .map_err(|_| "无法读取速览：行情状态已损坏".to_owned())?;
+    let transport = *state
+        .transport
+        .read()
+        .map_err(|_| "无法读取速览：连接状态已损坏".to_owned())?;
+    let refresh = state
+        .refresh_status
+        .read()
+        .map_err(|_| "无法读取速览：刷新状态已损坏".to_owned())?;
+    Ok(build_quick_view_snapshot(
+        &config,
+        &quotes,
+        transport,
+        refresh.last_success_at.clone(),
+        refresh.last_error.clone(),
+    ))
+}
+
+#[tauri::command]
+pub(super) fn hide_quick_view(app: AppHandle) -> Result<(), String> {
+    hide_quick_view_window(&app).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(super) fn open_settings(app: AppHandle) -> Result<(), String> {
+    show_settings(&app).map_err(|error| error.to_string())?;
+    hide_quick_view_window(&app).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -51,10 +93,14 @@ pub(super) fn preview_title(
         .read()
         .map_err(|_| "无法预览：连接状态已损坏".to_owned())?;
     let connection = display_connection(transport, Some(update.connection));
+    let portfolio = summarize_portfolio(&config.stocks, |symbol| {
+        quotes.get(symbol).map(|update| &update.quote)
+    });
 
-    render_tray_title(
+    render_tray_title_with_portfolio(
         &update.quote,
         active.position.as_ref(),
+        &portfolio,
         &config.display,
         &connection,
     )
@@ -207,14 +253,13 @@ pub(super) async fn save_user_config(
     }
     config.validate().map_err(|error| error.to_string())?;
 
-    let quote_identity_changed = {
-        let stored = state
-            .config
-            .read()
-            .map_err(|_| "无法保存设置：内部状态已损坏".to_owned())?;
-        stored.provider != config.provider
-            || normalized_symbols(&stored) != normalized_symbols(&config)
-    };
+    let stored_config = state
+        .config
+        .read()
+        .map_err(|_| "无法保存设置：内部状态已损坏".to_owned())?
+        .clone();
+    let quote_identity_changed = stored_config.provider != config.provider
+        || normalized_symbols(&stored_config) != normalized_symbols(&config);
 
     // P0：股票列表变化时先批量验证全部行情，失败则不落盘、保留原配置。
     let prefetched = if quote_identity_changed && config.provider == ProviderKind::Tencent {
@@ -235,7 +280,12 @@ pub(super) async fn save_user_config(
         None
     };
 
-    save_config(&state.config_path, &config).map_err(|error| error.to_string())?;
+    rebind_quick_view_shortcut(&app, &stored_config, &config).await?;
+    if let Err(error) = save_config(&state.config_path, &config) {
+        // 落盘失败时把系统级快捷键也恢复，避免内存、磁盘、实际行为三套状态打架。
+        let _ = rebind_quick_view_shortcut(&app, &config, &stored_config).await;
+        return Err(error.to_string());
+    }
     *state
         .config
         .write()

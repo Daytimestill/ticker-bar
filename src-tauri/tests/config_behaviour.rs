@@ -1,5 +1,6 @@
 use tickerbar_core::{
-    AppConfig, CompactStyle, DisplayMetric, DisplayPreset, ProviderKind, apply_display_preset,
+    AppConfig, CompactStyle, DisplayMetric, DisplayPreset, ProviderKind, QuickViewSort,
+    apply_display_preset,
 };
 
 #[test]
@@ -12,6 +13,9 @@ fn default_config_uses_a_real_quote_source() {
     assert_eq!(config.stocks[0].short_name, "小米");
     assert_eq!(config.active_stock, 0);
     assert_eq!(config.tray_throttle_ms, 3_000);
+    assert!(config.quick_view_enabled);
+    assert_eq!(config.quick_view_shortcut, "Control+Command+T");
+    assert_eq!(config.quick_view_sort, QuickViewSort::PositionFirst);
     assert_eq!(config.display.items.len(), 2);
     assert_eq!(config.display.items[0].metric, DisplayMetric::LastPrice);
     assert_eq!(
@@ -19,6 +23,30 @@ fn default_config_uses_a_real_quote_source() {
         DisplayMetric::DailyChangePercent
     );
     config.validate().expect("default config must be valid");
+}
+
+#[test]
+fn older_configs_receive_safe_quick_view_defaults() {
+    let mut stored = serde_json::to_value(AppConfig::default()).expect("config serializes");
+    stored
+        .as_object_mut()
+        .expect("config should be an object")
+        .remove("quickViewEnabled");
+    stored
+        .as_object_mut()
+        .expect("config should be an object")
+        .remove("quickViewShortcut");
+    stored
+        .as_object_mut()
+        .expect("config should be an object")
+        .remove("quickViewSort");
+
+    let restored: AppConfig =
+        serde_json::from_value(stored).expect("older config should still load");
+
+    assert!(restored.quick_view_enabled);
+    assert_eq!(restored.quick_view_shortcut, "Control+Command+T");
+    assert_eq!(restored.quick_view_sort, QuickViewSort::PositionFirst);
 }
 
 #[test]
@@ -46,6 +74,24 @@ fn json_round_trip_preserves_display_order_and_formatting() {
         restored.display.items[1].metric,
         DisplayMetric::PositionReturnPercent
     );
+}
+
+#[test]
+fn older_configs_enable_display_items_by_default() {
+    let mut stored = serde_json::to_value(AppConfig::default()).expect("config serializes");
+    for item in stored["display"]["items"]
+        .as_array_mut()
+        .expect("display items should be an array")
+    {
+        item.as_object_mut()
+            .expect("metric should be an object")
+            .remove("enabled");
+    }
+
+    let restored: AppConfig =
+        serde_json::from_value(stored).expect("older display items should still load");
+
+    assert!(restored.display.items.iter().all(|item| item.enabled));
 }
 
 #[test]
@@ -101,6 +147,18 @@ fn rejects_empty_symbol_and_empty_display_selection() {
             .expect_err("empty display selection must fail")
             .to_string(),
         "at least one display metric is required"
+    );
+
+    let mut all_paused = AppConfig::default();
+    for item in &mut all_paused.display.items {
+        item.enabled = false;
+    }
+    assert_eq!(
+        all_paused
+            .validate()
+            .expect_err("at least one metric must stay enabled")
+            .to_string(),
+        "at least one display metric must be enabled"
     );
 }
 

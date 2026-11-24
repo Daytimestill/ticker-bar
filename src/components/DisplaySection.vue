@@ -7,6 +7,7 @@ import {
   metricCapability,
   metricOptions,
   moveMetric,
+  setMetricEnabled,
   toggleMetric,
   type AppConfig,
   type DisplayMetric,
@@ -81,11 +82,43 @@ function metricCompactLabel(item: MetricConfig): string {
 function metricSummary(item: MetricConfig): string {
   const capability = metricCapability(item.metric)
   const parts: string[] = []
+  if (!item.enabled) parts.push('已暂停')
   if (capability.precision) parts.push(`${item.precision} 位`)
   if (capability.format) parts.push(metricFormatLabel(item))
   if (capability.compact) parts.push(metricCompactLabel(item))
   if (item.label) parts.push(`标签「${item.label}」`)
   return parts.length ? parts.join(' · ') : '文本内容，无需格式调整'
+}
+
+function setItemEnabled(item: MetricConfig, event: Event) {
+  const target = event.target as HTMLInputElement
+  try {
+    props.config.display.items = setMetricEnabled(
+      props.config.display.items,
+      item.metric,
+      target.checked,
+    )
+    displayError.value = ''
+    emit('refresh-preview')
+  } catch (error) {
+    target.checked = item.enabled
+    displayError.value = errorText(error)
+  }
+}
+
+function removeItem(metric: DisplayMetric) {
+  try {
+    props.config.display.items = toggleMetric(
+      props.config.display.items,
+      metric,
+      false,
+    )
+    expandedMetrics.value.delete(metric)
+    displayError.value = ''
+    emit('refresh-preview')
+  } catch (error) {
+    displayError.value = errorText(error)
+  }
 }
 
 function metricDetailsExpanded(metric: DisplayMetric): boolean {
@@ -178,6 +211,13 @@ onBeforeUnmount(disposePointerDrag)
       >
         持仓收益
       </button>
+      <button
+        type="button"
+        data-testid="preset-portfolio"
+        @click="selectPreset('portfolio')"
+      >
+        总持仓
+      </button>
     </div>
 
     <div class="display-workbench" data-testid="display-workbench">
@@ -217,6 +257,7 @@ onBeforeUnmount(disposePointerDrag)
             :class="{
               'is-dragging': draggingIndex === index,
               'is-drop-target': dropTargetIndex === index,
+              'is-disabled': !item.enabled,
             }"
           >
             <div class="item-summary">
@@ -235,37 +276,61 @@ onBeforeUnmount(disposePointerDrag)
                 <strong>{{ metricLabel(item.metric) }}</strong>
                 <span>{{ metricSummary(item) }}</span>
               </div>
-              <button
-                type="button"
-                class="item-disclosure"
-                :class="{
-                  'is-expanded': metricDetailsExpanded(item.metric),
-                }"
-                :data-testid="`item-toggle-${item.metric}`"
-                :aria-expanded="metricDetailsExpanded(item.metric)"
-                @click="toggleMetricDetails(item.metric)"
-              >
-                <span>调整</span>
-                <svg viewBox="0 0 16 16" aria-hidden="true">
-                  <path d="m4 6 4 4 4-4" />
-                </svg>
-              </button>
-              <div class="move-buttons">
+              <div class="item-actions">
+                <label class="item-enabled-control">
+                  <input
+                    class="toggle-input"
+                    type="checkbox"
+                    :checked="item.enabled"
+                    :data-testid="`metric-enabled-${item.metric}`"
+                    @change="setItemEnabled(item, $event)"
+                  />
+                  <span>{{ item.enabled ? '启用' : '暂停' }}</span>
+                </label>
                 <button
                   type="button"
-                  aria-label="上移"
-                  :disabled="index === 0"
-                  @click="move(index, -1)"
+                  class="item-disclosure"
+                  :class="{
+                    'is-expanded': metricDetailsExpanded(item.metric),
+                  }"
+                  :data-testid="`item-toggle-${item.metric}`"
+                  :aria-expanded="metricDetailsExpanded(item.metric)"
+                  @click="toggleMetricDetails(item.metric)"
                 >
-                  ↑
+                  <span>调整</span>
+                  <svg viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="m4 6 4 4 4-4" />
+                  </svg>
                 </button>
+                <div class="move-buttons">
+                  <button
+                    type="button"
+                    aria-label="上移"
+                    :disabled="index === 0"
+                    @click="move(index, -1)"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="下移"
+                    :disabled="index === config.display.items.length - 1"
+                    @click="move(index, 1)"
+                  >
+                    ↓
+                  </button>
+                </div>
                 <button
                   type="button"
-                  aria-label="下移"
-                  :disabled="index === config.display.items.length - 1"
-                  @click="move(index, 1)"
+                  class="item-delete"
+                  :aria-label="`删除${metricLabel(item.metric)}`"
+                  :title="`删除${metricLabel(item.metric)}`"
+                  :data-testid="`metric-delete-${item.metric}`"
+                  @click="removeItem(item.metric)"
                 >
-                  ↓
+                  <svg viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M3.5 4.5h9M6 4.5V3h4v1.5M5 6.5v6M8 6.5v6M11 6.5v6M4.5 4.5l.5 9h6l.5-9" />
+                  </svg>
                 </button>
               </div>
             </div>

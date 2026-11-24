@@ -1,5 +1,7 @@
 mod alert_dispatch;
 mod commands;
+mod macos_hotkey;
+mod quick_view_window;
 mod refresh;
 mod tray;
 
@@ -16,15 +18,18 @@ use time::OffsetDateTime;
 
 use crate::{
     AppConfig, CONFIG_SCHEMA_VERSION, ConnectionState, MockQuoteProvider, ProviderError,
-    ProviderKind, ProviderUpdate, TencentQuoteProvider, alerts::AlertMemoryEntry, load_config,
-    save_config,
+    ProviderKind, ProviderUpdate, StorageError, TencentQuoteProvider, alerts::AlertMemoryEntry,
+    load_config, save_config,
 };
 
+use macos_hotkey::MacHotKeyState;
+use quick_view_window::hide_quick_view;
 use refresh::start_refresh_loop;
-use tray::{TrayMenuState, build_tray, show_settings, update_tray};
+use tray::{TrayMenuState, build_tray, configure_launch_at_login, show_settings, update_tray};
 
 const TRAY_ID: &str = "tickerbar";
 const SETTINGS_WINDOW_LABEL: &str = "settings";
+const QUICK_VIEW_WINDOW_LABEL: &str = "quick-view";
 const SETTINGS_WINDOW_WIDTH: f64 = 1_040.0;
 const SETTINGS_WINDOW_HEIGHT: f64 = 780.0;
 const SETTINGS_WINDOW_MIN_WIDTH: f64 = 900.0;
@@ -127,6 +132,9 @@ pub fn run() {
             commands::get_first_run,
             commands::dismiss_first_run,
             commands::get_refresh_status,
+            commands::get_quick_view_snapshot,
+            commands::hide_quick_view,
+            commands::open_settings,
             commands::preview_title,
             commands::preview_portfolio,
             commands::send_test_alert,
@@ -138,20 +146,41 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             let config_path = app.path().app_config_dir()?.join("config.json");
-            // 配置损坏（手编 JSON 打错字等）不能让应用起不来：
-            // 备份原文件、回退默认配置继续启动，并把原因挂到刷新状态上。
-            let (loaded, recovery_note) = load_config_with_recovery(&config_path);
+            // 真正损坏的配置（如手编 JSON 打错字）会备份后自愈；
+            // 更高版本的配置则拒绝启动，绝不能让旧程序覆盖新数据。
+            let (loaded, recovery_note) =
+                load_config_with_recovery(&config_path).map_err(std::io::Error::other)?;
             let first_run = loaded.is_none();
             let mut config = loaded.unwrap_or_default();
             migrate_legacy_config(&mut config);
-            // 无条件写回：v1→v2 的结构迁移发生在解析层，这里统一持久化。
+            let launch_at_login = config.launch_at_login;
+            // 无条件写回：结构迁移发生在解析层，这里统一持久化并轮换备份。
             save_config(&config_path, &config)?;
             let state =
                 RuntimeState::new(config, config_path, first_run).map_err(std::io::Error::other)?;
             app.manage(state);
             app.manage(TrayMenuState::default());
+            let hot_key_state =
+                MacHotKeyState::install(app.handle().clone()).map_err(std::io::Error::other)?;
+            app.manage(hot_key_state);
             if let Some(note) = &recovery_note {
                 app.state::<RuntimeState>().record_refresh_error(note);
+            }
+            if let Err(error) = configure_launch_at_login(app.handle(), launch_at_login) {
+                app.state::<RuntimeState>()
+                    .record_refresh_error(&format!("登录时启动同步失败：{error}"));
+            }
+            let shortcut_config = app
+                .state::<RuntimeState>()
+                .config
+                .read()
+                .map_err(|_| std::io::Error::other("快捷键设置状态已损坏"))?
+                .clone();
+            if let Err(error) = app
+                .state::<MacHotKeyState>()
+                .register_initial(&shortcut_config)
+            {
+                app.state::<RuntimeState>().record_refresh_error(&error);
             }
 
             build_tray(app.handle())?;
@@ -166,7 +195,21 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("TickerBar failed to start");
 
-    app.run(|_app, event| {
+    app.run(|app, event| {
+        if let tauri::RunEvent::WindowEvent { label, event, .. } = &event
+            && label == QUICK_VIEW_WINDOW_LABEL
+        {
+            match event {
+                tauri::WindowEvent::Focused(false) => {
+                    let _ = hide_quick_view(app);
+                }
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
+                    let _ = hide_quick_view(app);
+                }
+                _ => {}
+            }
+        }
         if let tauri::RunEvent::ExitRequested { code, api, .. } = event
             && should_prevent_exit(code)
         {
@@ -182,9 +225,12 @@ fn should_prevent_exit(code: Option<i32>) -> bool {
 /// 读取持久化配置；读不出来（JSON 损坏、校验失败）时把原文件改名备份、
 /// 回退到「文件不存在」语义，让启动流程永远能走通。
 /// 返回 (加载结果, 恢复提示)；恢复提示非空即发生过自愈。
-fn load_config_with_recovery(config_path: &Path) -> (Option<AppConfig>, Option<String>) {
+fn load_config_with_recovery(
+    config_path: &Path,
+) -> Result<(Option<AppConfig>, Option<String>), StorageError> {
     match load_config(config_path) {
-        Ok(loaded) => (loaded, None),
+        Ok(loaded) => Ok((loaded, None)),
+        Err(error @ StorageError::UnsupportedSchema { .. }) => Err(error),
         Err(error) => {
             let backup_path =
                 config_path.with_extension(format!("json.corrupted-{}", current_timestamp()));
@@ -192,18 +238,23 @@ fn load_config_with_recovery(config_path: &Path) -> (Option<AppConfig>, Option<S
                 Ok(()) => format!("原文件已备份为 {}", backup_path.display()),
                 Err(rename_error) => format!("原文件备份失败：{rename_error}"),
             };
-            (
+            Ok((
                 None,
                 Some(format!(
                     "配置文件损坏，已重置为默认配置（{backup_note}）：{error}"
                 )),
-            )
+            ))
         }
     }
 }
 
 fn migrate_legacy_config(config: &mut AppConfig) -> bool {
     let mut changed = false;
+
+    if config.schema_version != CONFIG_SCHEMA_VERSION {
+        config.schema_version = CONFIG_SCHEMA_VERSION;
+        changed = true;
+    }
 
     if config.provider == ProviderKind::Mock {
         config.provider = ProviderKind::Tencent;
@@ -321,7 +372,8 @@ mod tests {
         let path = dir.join("config.json");
         fs::write(&path, "{not-json").expect("fixture should be written");
 
-        let (loaded, note) = load_config_with_recovery(&path);
+        let (loaded, note) =
+            load_config_with_recovery(&path).expect("malformed config should be recoverable");
 
         assert!(loaded.is_none(), "corrupt config must fall back to default");
         let note = note.expect("recovery should explain what happened");
@@ -345,14 +397,49 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("tickerbar-recovery-ok-{unique}"));
         let path = dir.join("config.json");
 
-        let (loaded, note) = load_config_with_recovery(&path);
+        let (loaded, note) =
+            load_config_with_recovery(&path).expect("missing config should be accepted");
         assert!(loaded.is_none());
         assert!(note.is_none(), "missing file is first-run, not corruption");
 
         save_config(&path, &AppConfig::default()).expect("fixture config should save");
-        let (loaded, note) = load_config_with_recovery(&path);
+        let (loaded, note) =
+            load_config_with_recovery(&path).expect("healthy config should be accepted");
         assert!(loaded.is_some());
         assert!(note.is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn newer_config_is_never_moved_or_replaced_by_recovery() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after the Unix epoch")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("tickerbar-recovery-newer-{unique}"));
+        fs::create_dir_all(&dir).expect("test directory should be created");
+        let path = dir.join("config.json");
+        let mut json =
+            serde_json::to_value(AppConfig::default()).expect("fixture should serialize");
+        json["schemaVersion"] = serde_json::json!(CONFIG_SCHEMA_VERSION + 1);
+        json["display"]["items"][0]["metric"] = serde_json::json!("futureMetric");
+        let original = serde_json::to_vec_pretty(&json).expect("fixture should serialize");
+        fs::write(&path, &original).expect("fixture should be written");
+
+        let error = load_config_with_recovery(&path)
+            .expect_err("newer config must stop an older app before it can overwrite data");
+
+        assert!(error.to_string().contains("newer config schema"));
+        assert_eq!(
+            fs::read(&path).expect("config should remain in place"),
+            original
+        );
+        let backups = fs::read_dir(&dir)
+            .expect("test directory should be listable")
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().contains("corrupted"))
+            .count();
+        assert_eq!(backups, 0, "a newer config is not corrupt");
         let _ = fs::remove_dir_all(&dir);
     }
 

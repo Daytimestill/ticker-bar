@@ -1,6 +1,7 @@
 use tickerbar_core::{
-    CompactStyle, ConnectionState, DisplayConfig, DisplayMetric, MetricConfig, Position,
-    QuoteSnapshot, calculate_position, render_tray_title,
+    CompactStyle, ConnectionState, DisplayConfig, DisplayMetric, MetricConfig, PortfolioSummary,
+    PortfolioTotal, Position, QuoteSnapshot, calculate_position, render_tray_title,
+    render_tray_title_with_portfolio,
 };
 
 fn quote() -> QuoteSnapshot {
@@ -77,6 +78,151 @@ fn preserves_user_order_for_profit_first_layout() {
 }
 
 #[test]
+fn renders_total_portfolio_profit_and_return_separately_by_currency() {
+    let display = DisplayConfig {
+        items: vec![
+            MetricConfig::new(DisplayMetric::PortfolioProfit)
+                .with_precision(0)
+                .with_sign()
+                .with_label("总盈"),
+            MetricConfig::new(DisplayMetric::PortfolioReturnPercent)
+                .with_precision(2)
+                .with_direction_arrow()
+                .with_label("总率"),
+        ],
+        separator: " · ".into(),
+        append_closed_status: false,
+        append_delayed_status: false,
+    };
+    let portfolio = PortfolioSummary {
+        rows: vec![],
+        totals: vec![
+            PortfolioTotal {
+                currency: "HKD".into(),
+                market_value: "31000".parse().expect("fixture decimal"),
+                cost_basis: "30000".parse().expect("fixture decimal"),
+                unrealized_profit: "1000".parse().expect("fixture decimal"),
+                return_percent: "3.3333".parse().expect("fixture decimal"),
+            },
+            PortfolioTotal {
+                currency: "CNY".into(),
+                market_value: "900".parse().expect("fixture decimal"),
+                cost_basis: "1000".parse().expect("fixture decimal"),
+                unrealized_profit: "-100".parse().expect("fixture decimal"),
+                return_percent: "-10".parse().expect("fixture decimal"),
+            },
+        ],
+        missing_quotes: 0,
+    };
+
+    let title = render_tray_title_with_portfolio(
+        &quote(),
+        Some(&position()),
+        &portfolio,
+        &display,
+        &ConnectionState::Live,
+    )
+    .expect("portfolio metrics should render");
+
+    assert_eq!(
+        title,
+        "HKD总盈+1000/CNY总盈-100 · HKD总率↑3.33%/CNY总率↓10.00%"
+    );
+}
+
+#[test]
+fn omits_the_currency_prefix_for_a_single_currency_portfolio() {
+    let display = DisplayConfig {
+        items: vec![
+            MetricConfig::new(DisplayMetric::PortfolioProfit)
+                .with_precision(0)
+                .with_sign()
+                .with_label("总盈"),
+        ],
+        separator: " ".into(),
+        append_closed_status: false,
+        append_delayed_status: false,
+    };
+    let portfolio = PortfolioSummary {
+        rows: vec![],
+        totals: vec![PortfolioTotal {
+            currency: "CNY".into(),
+            market_value: "31000".parse().expect("fixture decimal"),
+            cost_basis: "30000".parse().expect("fixture decimal"),
+            unrealized_profit: "1000".parse().expect("fixture decimal"),
+            return_percent: "3.3333".parse().expect("fixture decimal"),
+        }],
+        missing_quotes: 0,
+    };
+
+    let title = render_tray_title_with_portfolio(
+        &quote(),
+        None,
+        &portfolio,
+        &display,
+        &ConnectionState::Live,
+    )
+    .expect("single currency total should render");
+
+    assert_eq!(title, "总盈+1000");
+}
+
+#[test]
+fn skips_paused_metrics_but_keeps_their_configuration() {
+    let mut paused = MetricConfig::new(DisplayMetric::LastPrice).with_precision(3);
+    paused.enabled = false;
+    let display = DisplayConfig {
+        items: vec![
+            paused,
+            MetricConfig::new(DisplayMetric::DailyChangePercent)
+                .with_precision(2)
+                .with_direction_arrow(),
+        ],
+        separator: " ".into(),
+        append_closed_status: false,
+        append_delayed_status: false,
+    };
+
+    let title = render_tray_title(&quote(), None, &display, &ConnectionState::Live)
+        .expect("the remaining enabled metric should render");
+
+    assert_eq!(title, "↑1.54%");
+    assert_eq!(display.items[0].precision, 3);
+}
+
+#[test]
+fn marks_total_portfolio_as_pending_when_any_position_has_no_quote() {
+    let display = DisplayConfig {
+        items: vec![MetricConfig::new(DisplayMetric::PortfolioProfit).with_label("总盈")],
+        separator: " ".into(),
+        append_closed_status: false,
+        append_delayed_status: false,
+    };
+    let portfolio = PortfolioSummary {
+        rows: vec![],
+        totals: vec![PortfolioTotal {
+            currency: "CNY".into(),
+            market_value: "1100".parse().expect("fixture decimal"),
+            cost_basis: "1000".parse().expect("fixture decimal"),
+            unrealized_profit: "100".parse().expect("fixture decimal"),
+            return_percent: "10".parse().expect("fixture decimal"),
+        }],
+        missing_quotes: 1,
+    };
+
+    let title = render_tray_title_with_portfolio(
+        &quote(),
+        None,
+        &portfolio,
+        &display,
+        &ConnectionState::Live,
+    )
+    .expect("an incomplete total should render an honest pending state");
+
+    assert_eq!(title, "总盈待更新");
+}
+
+#[test]
 fn hides_position_metrics_when_no_position_is_configured() {
     let display = DisplayConfig {
         items: vec![
@@ -95,7 +241,7 @@ fn hides_position_metrics_when_no_position_is_configured() {
 }
 
 #[test]
-fn always_marks_disconnected_quotes_even_when_status_fields_are_disabled() {
+fn does_not_force_connection_markers_when_market_status_is_not_selected() {
     let display = DisplayConfig {
         items: vec![MetricConfig::new(DisplayMetric::LastPrice).with_precision(2)],
         separator: " ".into(),
@@ -103,15 +249,12 @@ fn always_marks_disconnected_quotes_even_when_status_fields_are_disabled() {
         append_delayed_status: false,
     };
 
-    let title = render_tray_title(
-        &quote(),
-        Some(&position()),
-        &display,
-        &ConnectionState::Disconnected,
-    )
-    .expect("cached title should render");
+    for connection in [ConnectionState::Reconnecting, ConnectionState::Disconnected] {
+        let title = render_tray_title(&quote(), Some(&position()), &display, &connection)
+            .expect("cached title should render");
 
-    assert_eq!(title, "42.85 !");
+        assert_eq!(title, "42.85");
+    }
 }
 
 #[test]

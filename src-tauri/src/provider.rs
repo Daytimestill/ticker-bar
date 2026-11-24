@@ -261,11 +261,7 @@ async fn read_limited_body(mut response: reqwest::Response) -> Result<String, Pr
         return Err(ProviderError::ResponseTooLarge(length as usize));
     }
     let mut body: Vec<u8> = Vec::new();
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|error| ProviderError::Network(error.to_string()))?
-    {
+    while let Some(chunk) = response.chunk().await.map_err(ProviderError::from)? {
         if body.len() + chunk.len() > MAX_RESPONSE_BYTES {
             return Err(ProviderError::ResponseTooLarge(body.len() + chunk.len()));
         }
@@ -285,7 +281,7 @@ impl TencentQuoteProvider {
             .timeout(Duration::from_secs(5))
             .user_agent(concat!("TickerBar/", env!("CARGO_PKG_VERSION")))
             .build()
-            .map_err(|error| ProviderError::Network(error.to_string()))?;
+            .map_err(ProviderError::from)?;
         Ok(Self { client })
     }
 
@@ -311,7 +307,7 @@ impl TencentQuoteProvider {
             ))
             .send()
             .await
-            .map_err(|error| ProviderError::Network(error.to_string()))?;
+            .map_err(ProviderError::from)?;
         let status = response.status();
         if !status.is_success() {
             return Err(ProviderError::HttpStatus(status.as_u16()));
@@ -338,7 +334,7 @@ impl TencentQuoteProvider {
         }
 
         let mut url = reqwest::Url::parse(TENCENT_SEARCH_ENDPOINT)
-            .map_err(|error| ProviderError::Network(error.to_string()))?;
+            .map_err(|_| ProviderError::Network(NetworkFailure::Request))?;
         url.query_pairs_mut()
             .append_pair("v", "2")
             .append_pair("t", "all")
@@ -349,7 +345,7 @@ impl TencentQuoteProvider {
             .get(url)
             .send()
             .await
-            .map_err(|error| ProviderError::Network(error.to_string()))?;
+            .map_err(ProviderError::from)?;
         let status = response.status();
         if !status.is_success() {
             return Err(ProviderError::HttpStatus(status.as_u16()));
@@ -478,11 +474,18 @@ impl TencentQuoteProvider {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NetworkFailure {
+    Timeout,
+    Connection,
+    Request,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProviderError {
     NotConfigured,
     UnsupportedSymbol(String),
     InvalidSearchQuery,
-    Network(String),
+    Network(NetworkFailure),
     HttpStatus(u16),
     ResponseTooLarge(usize),
     InvalidResponse(String),
@@ -497,7 +500,15 @@ impl fmt::Display for ProviderError {
                 write!(formatter, "unsupported stock symbol: {symbol}")
             }
             Self::InvalidSearchQuery => write!(formatter, "股票搜索内容过长"),
-            Self::Network(message) => write!(formatter, "quote request failed: {message}"),
+            Self::Network(NetworkFailure::Timeout) => {
+                write!(formatter, "行情请求超时，请稍后重试")
+            }
+            Self::Network(NetworkFailure::Connection) => {
+                write!(formatter, "无法连接行情服务器，请检查网络后重试")
+            }
+            Self::Network(NetworkFailure::Request) => {
+                write!(formatter, "行情请求失败，请稍后重试")
+            }
             Self::HttpStatus(status) => {
                 write!(formatter, "quote request returned HTTP {status}")
             }
@@ -538,6 +549,19 @@ impl From<DomainError> for ProviderError {
     }
 }
 
+impl From<reqwest::Error> for ProviderError {
+    fn from(error: reqwest::Error) -> Self {
+        let failure = if error.is_timeout() {
+            NetworkFailure::Timeout
+        } else if error.is_connect() {
+            NetworkFailure::Connection
+        } else {
+            NetworkFailure::Request
+        };
+        Self::Network(failure)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -575,6 +599,22 @@ mod tests {
         assert_eq!(
             TencentQuoteProvider::canonical_symbol("sh600519").unwrap(),
             "600519.SH"
+        );
+    }
+
+    #[test]
+    fn presents_network_failures_concisely_without_request_urls() {
+        assert_eq!(
+            ProviderError::Network(NetworkFailure::Timeout).to_string(),
+            "行情请求超时，请稍后重试"
+        );
+        assert_eq!(
+            ProviderError::Network(NetworkFailure::Connection).to_string(),
+            "无法连接行情服务器，请检查网络后重试"
+        );
+        assert_eq!(
+            ProviderError::Network(NetworkFailure::Request).to_string(),
+            "行情请求失败，请稍后重试"
         );
     }
 

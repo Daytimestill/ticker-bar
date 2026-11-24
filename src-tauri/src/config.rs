@@ -5,11 +5,25 @@ use crate::{
     Position,
 };
 
-pub const CONFIG_SCHEMA_VERSION: u32 = 3;
+pub const CONFIG_SCHEMA_VERSION: u32 = 6;
 /// 免费行情接口友好上限：批量查询一次带全部股票，菜单列表也保持可读。
 pub const MAX_STOCKS: usize = 8;
 /// 提醒规则上限：限制每轮刷新的评估开销，单机场景绰绰有余。
 pub const MAX_ALERTS: usize = 20;
+
+pub const DEFAULT_QUICK_VIEW_SHORTCUT: &str = "Control+Command+T";
+
+const fn quick_view_enabled_by_default() -> bool {
+    true
+}
+
+fn default_quick_view_shortcut() -> String {
+    DEFAULT_QUICK_VIEW_SHORTCUT.into()
+}
+
+const fn default_quick_view_sort() -> QuickViewSort {
+    QuickViewSort::PositionFirst
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,11 +33,19 @@ pub enum ProviderKind {
     Longbridge,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum QuickViewSort {
+    PositionFirst,
+    StockOrder,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DisplayPreset {
     Price,
     PriceChange,
     Position,
+    Portfolio,
 }
 
 /// 单只股票的配置：标的与本地持仓。
@@ -49,6 +71,14 @@ pub struct AppConfig {
     pub alerts: Vec<AlertRule>,
     pub display: DisplayConfig,
     pub launch_at_login: bool,
+    /// 全局快捷键唤出的实时速览面板。旧配置默认开启，避免升级后功能悄悄缺席。
+    #[serde(default = "quick_view_enabled_by_default")]
+    pub quick_view_enabled: bool,
+    #[serde(default = "default_quick_view_shortcut")]
+    pub quick_view_shortcut: String,
+    /// 速览列表默认把真实持仓放在最容易扫到的位置；也可完全跟随股票页的自定义顺序。
+    #[serde(default = "default_quick_view_sort")]
+    pub quick_view_sort: QuickViewSort,
     pub tray_throttle_ms: u64,
 }
 
@@ -74,6 +104,9 @@ impl Default for AppConfig {
                 append_delayed_status: false,
             },
             launch_at_login: false,
+            quick_view_enabled: true,
+            quick_view_shortcut: DEFAULT_QUICK_VIEW_SHORTCUT.into(),
+            quick_view_sort: QuickViewSort::PositionFirst,
             tray_throttle_ms: 3_000,
         }
     }
@@ -96,6 +129,9 @@ impl AppConfig {
         }
         if self.display.items.is_empty() {
             return Err(DomainError::EmptyDisplayMetrics);
+        }
+        if !self.display.items.iter().any(|item| item.enabled) {
+            return Err(DomainError::NoEnabledDisplayMetrics);
         }
         let mut seen = Vec::with_capacity(self.stocks.len());
         for stock in &self.stocks {
@@ -183,6 +219,9 @@ impl From<LegacyAppConfigV1> for AppConfig {
             alerts: Vec::new(),
             display: legacy.display,
             launch_at_login: legacy.launch_at_login,
+            quick_view_enabled: true,
+            quick_view_shortcut: DEFAULT_QUICK_VIEW_SHORTCUT.into(),
+            quick_view_sort: QuickViewSort::PositionFirst,
             tray_throttle_ms: legacy.tray_throttle_ms,
         }
     }
@@ -218,6 +257,17 @@ pub fn apply_display_preset(preset: DisplayPreset) -> Vec<MetricConfig> {
             MetricConfig::new(DisplayMetric::PositionReturnPercent)
                 .with_precision(2)
                 .with_direction_arrow(),
+        ],
+        DisplayPreset::Portfolio => vec![
+            MetricConfig::new(DisplayMetric::PortfolioProfit)
+                .with_precision(0)
+                .with_sign()
+                .with_compact_style(CompactStyle::Chinese)
+                .with_label("总盈"),
+            MetricConfig::new(DisplayMetric::PortfolioReturnPercent)
+                .with_precision(2)
+                .with_direction_arrow()
+                .with_label("总率"),
         ],
     }
 }

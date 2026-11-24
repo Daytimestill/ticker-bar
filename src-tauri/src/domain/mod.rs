@@ -3,6 +3,8 @@ use std::{error::Error, fmt, str::FromStr};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
+use crate::portfolio::{PortfolioSummary, PortfolioTotal};
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QuoteSnapshot {
@@ -157,6 +159,8 @@ pub enum DisplayMetric {
     DayLow,
     PositionProfit,
     PositionReturnPercent,
+    PortfolioProfit,
+    PortfolioReturnPercent,
     MarketValue,
     AverageCost,
     Quantity,
@@ -177,6 +181,9 @@ pub enum CompactStyle {
 #[serde(rename_all = "camelCase")]
 pub struct MetricConfig {
     pub metric: DisplayMetric,
+    /// 暂停只影响渲染，排序与格式配置原样保留。
+    #[serde(default = "metric_enabled_by_default")]
+    pub enabled: bool,
     pub precision: u32,
     pub show_sign: bool,
     pub direction_arrow: bool,
@@ -184,10 +191,15 @@ pub struct MetricConfig {
     pub label: Option<String>,
 }
 
+const fn metric_enabled_by_default() -> bool {
+    true
+}
+
 impl MetricConfig {
     pub fn new(metric: DisplayMetric) -> Self {
         Self {
             metric,
+            enabled: true,
             precision: 2,
             show_sign: false,
             direction_arrow: false,
@@ -249,8 +261,27 @@ pub fn render_tray_title(
     display: &DisplayConfig,
     connection: &ConnectionState,
 ) -> Result<String, DomainError> {
+    render_tray_title_with_portfolio(
+        quote,
+        position,
+        &PortfolioSummary::default(),
+        display,
+        connection,
+    )
+}
+
+pub fn render_tray_title_with_portfolio(
+    quote: &QuoteSnapshot,
+    position: Option<&Position>,
+    portfolio: &PortfolioSummary,
+    display: &DisplayConfig,
+    connection: &ConnectionState,
+) -> Result<String, DomainError> {
     if display.items.is_empty() {
         return Err(DomainError::EmptyDisplayMetrics);
+    }
+    if !display.items.iter().any(|item| item.enabled) {
+        return Err(DomainError::NoEnabledDisplayMetrics);
     }
 
     if matches!(connection, ConnectionState::AuthenticationFailed) {
@@ -263,6 +294,9 @@ pub fn render_tray_title(
     let mut parts = Vec::with_capacity(display.items.len());
 
     for item in &display.items {
+        if !item.enabled {
+            continue;
+        }
         let value = match item.metric {
             DisplayMetric::Symbol => quote
                 .symbol
@@ -305,6 +339,18 @@ pub fn render_tray_title(
             DisplayMetric::PositionReturnPercent => pnl
                 .as_ref()
                 .map(|value| format_value(value.return_percent, item, ValueKind::Percent)),
+            DisplayMetric::PortfolioProfit => Some(format_portfolio_value(
+                portfolio,
+                item,
+                ValueKind::Number,
+                |total| total.unrealized_profit,
+            )),
+            DisplayMetric::PortfolioReturnPercent => Some(format_portfolio_value(
+                portfolio,
+                item,
+                ValueKind::Percent,
+                |total| total.return_percent,
+            )),
             DisplayMetric::MarketValue => pnl
                 .as_ref()
                 .map(|value| format_value(value.market_value, item, ValueKind::Number)),
@@ -343,10 +389,8 @@ pub fn render_tray_title(
     let contains_market_status = display
         .items
         .iter()
-        .any(|item| item.metric == DisplayMetric::MarketStatus);
+        .any(|item| item.enabled && item.metric == DisplayMetric::MarketStatus);
     let suffix = match connection {
-        ConnectionState::Connecting | ConnectionState::Reconnecting => Some("↻"),
-        ConnectionState::Disconnected => Some("!"),
         ConnectionState::Delayed if display.append_delayed_status && !contains_market_status => {
             Some("·延")
         }
@@ -354,6 +398,9 @@ pub fn render_tray_title(
             Some("·收")
         }
         ConnectionState::Live
+        | ConnectionState::Connecting
+        | ConnectionState::Reconnecting
+        | ConnectionState::Disconnected
         | ConnectionState::Delayed
         | ConnectionState::Closed
         | ConnectionState::AuthenticationFailed => None,
@@ -365,6 +412,37 @@ pub fn render_tray_title(
     }
 
     Ok(title)
+}
+
+/// 菜单栏里的组合指标必须如实处理两种情况：不同币种不能相加；任一持仓
+/// 缺行情时也不能把部分结果伪装成完整合计。
+fn format_portfolio_value(
+    portfolio: &PortfolioSummary,
+    config: &MetricConfig,
+    kind: ValueKind,
+    value_of: impl Fn(&PortfolioTotal) -> Decimal,
+) -> String {
+    if portfolio.missing_quotes > 0 {
+        return apply_label("待更新".to_owned(), config);
+    }
+    if portfolio.totals.is_empty() {
+        return apply_label("—".to_owned(), config);
+    }
+
+    let include_currency = portfolio.totals.len() > 1;
+    portfolio
+        .totals
+        .iter()
+        .map(|total| {
+            let value = format_value(value_of(total), config, kind);
+            if include_currency {
+                format!("{}{value}", total.currency)
+            } else {
+                value
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -496,6 +574,7 @@ pub enum DomainError {
     TooManyAlerts(usize),
     AlertPositionRequired(String),
     EmptyDisplayMetrics,
+    NoEnabledDisplayMetrics,
     NoRenderableMetrics,
 }
 
@@ -544,6 +623,9 @@ impl fmt::Display for DomainError {
             }
             Self::EmptyDisplayMetrics => {
                 write!(formatter, "at least one display metric is required")
+            }
+            Self::NoEnabledDisplayMetrics => {
+                write!(formatter, "at least one display metric must be enabled")
             }
             Self::NoRenderableMetrics => write!(formatter, "no selected metric has a value"),
         }

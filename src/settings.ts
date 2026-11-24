@@ -11,6 +11,8 @@ export type DisplayMetric =
   | 'dayLow'
   | 'positionProfit'
   | 'positionReturnPercent'
+  | 'portfolioProfit'
+  | 'portfolioReturnPercent'
   | 'marketValue'
   | 'averageCost'
   | 'quantity'
@@ -19,10 +21,16 @@ export type DisplayMetric =
   | 'updatedTime'
 
 export type CompactStyle = 'none' | 'western' | 'chinese'
-export type DisplayPreset = 'price' | 'priceChange' | 'position' | 'custom'
+export type DisplayPreset =
+  | 'price'
+  | 'priceChange'
+  | 'position'
+  | 'portfolio'
+  | 'custom'
 
 export interface MetricConfig {
   metric: DisplayMetric
+  enabled: boolean
   precision: number
   showSign: boolean
   directionArrow: boolean
@@ -79,7 +87,33 @@ export interface AppConfig {
   alerts: AlertRule[]
   display: DisplayConfig
   launchAtLogin: boolean
+  quickViewEnabled: boolean
+  quickViewShortcut: string
+  quickViewSort: QuickViewSort
   trayThrottleMs: number
+}
+
+export type QuickViewSort = 'positionFirst' | 'stockOrder'
+
+export const quickViewShortcutOptions = [
+  { value: 'Control+Command+T', label: '⌃⌘T' },
+  { value: 'Control+Shift+T', label: '⌃⇧T' },
+  { value: 'Command+Shift+Y', label: '⇧⌘Y' },
+] as const
+
+export const quickViewSortOptions: ReadonlyArray<{
+  value: QuickViewSort
+  label: string
+}> = [
+  { value: 'positionFirst', label: '持仓优先' },
+  { value: 'stockOrder', label: '按股票列表' },
+]
+
+export function quickViewShortcutLabel(value: string): string {
+  return (
+    quickViewShortcutOptions.find((option) => option.value === value)?.label ??
+    value
+  )
 }
 
 // 与后端 MAX_STOCKS 保持一致。
@@ -181,6 +215,37 @@ export interface PortfolioSummary {
   missingQuotes: number
 }
 
+export type ConnectionState =
+  | 'connecting'
+  | 'live'
+  | 'delayed'
+  | 'closed'
+  | 'reconnecting'
+  | 'disconnected'
+  | 'authenticationFailed'
+
+export interface QuickViewRow {
+  symbol: string
+  shortName: string
+  currency: string
+  lastPrice: string | null
+  dailyChangePercent: string | null
+  positionProfit: string | null
+  positionReturnPercent: string | null
+  connection: ConnectionState
+}
+
+export interface QuickViewSnapshot {
+  shortcut: string
+  connection: ConnectionState
+  rows: QuickViewRow[]
+  totals: PortfolioTotal[]
+  missingQuotes: number
+  updatedAt: string | null
+  lastSuccessAt: string | null
+  lastError: string | null
+}
+
 /**
  * 单个显示项支持哪些调整。
  *
@@ -208,10 +273,13 @@ const SIGNED_METRICS: readonly DisplayMetric[] = [
   'dailyChangePercent',
   'positionProfit',
   'positionReturnPercent',
+  'portfolioProfit',
+  'portfolioReturnPercent',
   'profitPerShare',
 ]
 const COMPACT_METRICS: readonly DisplayMetric[] = [
   'positionProfit',
+  'portfolioProfit',
   'marketValue',
   'quantity',
 ]
@@ -253,6 +321,12 @@ export const metricOptions: MetricOption[] = [
     label: '持仓收益率',
     group: '持仓',
   },
+  { metric: 'portfolioProfit', label: '总持仓收益', group: '持仓' },
+  {
+    metric: 'portfolioReturnPercent',
+    label: '总持仓收益率',
+    group: '持仓',
+  },
   { metric: 'marketValue', label: '当前市值', group: '持仓' },
   { metric: 'averageCost', label: '平均成本', group: '持仓' },
   { metric: 'quantity', label: '持仓数量', group: '持仓' },
@@ -263,22 +337,37 @@ export const metricOptions: MetricOption[] = [
 
 export function recommendedMetric(metric: DisplayMetric): MetricConfig {
   const percentage =
-    metric === 'dailyChangePercent' || metric === 'positionReturnPercent'
+    metric === 'dailyChangePercent' ||
+    metric === 'positionReturnPercent' ||
+    metric === 'portfolioReturnPercent'
   const signed =
     metric === 'dailyChange' ||
     metric === 'positionProfit' ||
+    metric === 'portfolioProfit' ||
     metric === 'profitPerShare'
   const compact =
-    metric === 'positionProfit' || metric === 'marketValue'
+    metric === 'positionProfit' ||
+    metric === 'portfolioProfit' ||
+    metric === 'marketValue'
 
   return {
     metric,
+    enabled: true,
     precision:
-      metric === 'quantity' || metric === 'positionProfit' ? 0 : 2,
+      metric === 'quantity' ||
+      metric === 'positionProfit' ||
+      metric === 'portfolioProfit'
+        ? 0
+        : 2,
     showSign: signed,
     directionArrow: percentage,
     compactStyle: compact ? 'chinese' : 'none',
-    label: null,
+    label:
+      metric === 'portfolioProfit'
+        ? '总盈'
+        : metric === 'portfolioReturnPercent'
+          ? '总率'
+          : null,
   }
 }
 
@@ -296,6 +385,11 @@ export function applyPreset(preset: DisplayPreset): MetricConfig[] {
         recommendedMetric('positionProfit'),
         recommendedMetric('positionReturnPercent'),
       ]
+    case 'portfolio':
+      return [
+        recommendedMetric('portfolioProfit'),
+        recommendedMetric('portfolioReturnPercent'),
+      ]
     case 'custom':
       return []
   }
@@ -303,7 +397,7 @@ export function applyPreset(preset: DisplayPreset): MetricConfig[] {
 
 export function createDefaultConfig(): AppConfig {
   return {
-    schemaVersion: 2,
+    schemaVersion: 6,
     provider: 'tencent',
     // 示例股票只带行情不带持仓：首启不该展示编造的盈亏数据。
     stocks: [
@@ -324,6 +418,9 @@ export function createDefaultConfig(): AppConfig {
       appendDelayedStatus: false,
     },
     launchAtLogin: false,
+    quickViewEnabled: true,
+    quickViewShortcut: 'Control+Command+T',
+    quickViewSort: 'positionFirst',
     trayThrottleMs: 3_000,
   }
 }
@@ -514,7 +611,30 @@ export function toggleMetric(
   if (items.length === 1) {
     throw new Error('至少保留一个菜单栏数据项')
   }
-  return items.filter((item) => item.metric !== metric)
+  const remaining = items.filter((item) => item.metric !== metric)
+  if (!remaining.some((item) => item.enabled)) {
+    throw new Error('至少启用一个菜单栏数据项')
+  }
+  return remaining
+}
+
+/** 暂停某项时保留其位置与格式；菜单栏必须至少还有一个启用项。 */
+export function setMetricEnabled(
+  items: MetricConfig[],
+  metric: DisplayMetric,
+  enabled: boolean,
+): MetricConfig[] {
+  const target = items.find((item) => item.metric === metric)
+  if (!target || target.enabled === enabled) return items
+  if (
+    !enabled &&
+    items.filter((item) => item.enabled && item.metric !== metric).length === 0
+  ) {
+    throw new Error('至少启用一个菜单栏数据项')
+  }
+  return items.map((item) =>
+    item.metric === metric ? { ...item, enabled } : item,
+  )
 }
 
 export function errorText(error: unknown): string {

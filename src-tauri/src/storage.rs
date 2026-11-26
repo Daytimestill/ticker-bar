@@ -8,6 +8,13 @@ use std::{
 use crate::{AppConfig, CONFIG_SCHEMA_VERSION};
 
 pub fn load_config(path: &Path) -> Result<Option<AppConfig>, StorageError> {
+    load_config_with_migration(path).map(|loaded| loaded.map(|(config, _)| config))
+}
+
+/// 保留磁盘上的版本信息；旧格式在反序列化时可能已被转成当前结构。
+pub(crate) fn load_config_with_migration(
+    path: &Path,
+) -> Result<Option<(AppConfig, bool)>, StorageError> {
     if !path.exists() {
         return Ok(None);
     }
@@ -21,9 +28,10 @@ pub fn load_config(path: &Path) -> Result<Option<AppConfig>, StorageError> {
             path: path.to_owned(),
             source,
         })?;
-    if let Some(found) = json
+    let version = json
         .get("schemaVersion")
-        .and_then(serde_json::Value::as_u64)
+        .and_then(serde_json::Value::as_u64);
+    if let Some(found) = version
         && found > u64::from(CONFIG_SCHEMA_VERSION)
     {
         return Err(StorageError::UnsupportedSchema {
@@ -40,7 +48,10 @@ pub fn load_config(path: &Path) -> Result<Option<AppConfig>, StorageError> {
         })?;
     config.validate().map_err(StorageError::Invalid)?;
 
-    Ok(Some(config))
+    Ok(Some((
+        config,
+        version != Some(u64::from(CONFIG_SCHEMA_VERSION)),
+    )))
 }
 
 pub fn save_config(path: &Path, config: &AppConfig) -> Result<(), StorageError> {

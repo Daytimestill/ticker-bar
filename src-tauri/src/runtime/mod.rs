@@ -19,7 +19,7 @@ use time::OffsetDateTime;
 use crate::{
     AppConfig, CONFIG_SCHEMA_VERSION, ConnectionState, MockQuoteProvider, ProviderError,
     ProviderKind, ProviderUpdate, StorageError, TencentQuoteProvider, alerts::AlertMemoryEntry,
-    load_config, save_config,
+    save_config, storage::load_config_with_migration,
 };
 
 use macos_hotkey::MacHotKeyState;
@@ -146,16 +146,8 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             let config_path = app.path().app_config_dir()?.join("config.json");
-            // 真正损坏的配置（如手编 JSON 打错字）会备份后自愈；
-            // 更高版本的配置则拒绝启动，绝不能让旧程序覆盖新数据。
-            let (loaded, recovery_note) =
-                load_config_with_recovery(&config_path).map_err(std::io::Error::other)?;
-            let first_run = loaded.is_none();
-            let mut config = loaded.unwrap_or_default();
-            migrate_legacy_config(&mut config);
+            let (config, first_run, recovery_note) = prepare_startup_config(&config_path)?;
             let launch_at_login = config.launch_at_login;
-            // 无条件写回：结构迁移发生在解析层，这里统一持久化并轮换备份。
-            save_config(&config_path, &config)?;
             let state =
                 RuntimeState::new(config, config_path, first_run).map_err(std::io::Error::other)?;
             app.manage(state);
@@ -222,13 +214,29 @@ fn should_prevent_exit(code: Option<i32>) -> bool {
     code.is_none()
 }
 
+type LoadedConfig = Option<(AppConfig, bool)>;
+
+fn prepare_startup_config(
+    config_path: &Path,
+) -> Result<(AppConfig, bool, Option<String>), StorageError> {
+    let (loaded, recovery_note) = load_config_with_recovery(config_path)?;
+    let first_run = loaded.is_none();
+    let (mut config, needs_write) = loaded.unwrap_or_else(|| (AppConfig::default(), true));
+    let normalized = migrate_legacy_config(&mut config);
+    // 只在首启、恢复或真实迁移时写盘，普通重启不能覆盖上一版的备份。
+    if needs_write || normalized {
+        save_config(config_path, &config)?;
+    }
+    Ok((config, first_run, recovery_note))
+}
+
 /// 读取持久化配置；读不出来（JSON 损坏、校验失败）时把原文件改名备份、
 /// 回退到「文件不存在」语义，让启动流程永远能走通。
 /// 返回 (加载结果, 恢复提示)；恢复提示非空即发生过自愈。
 fn load_config_with_recovery(
     config_path: &Path,
-) -> Result<(Option<AppConfig>, Option<String>), StorageError> {
-    match load_config(config_path) {
+) -> Result<(LoadedConfig, Option<String>), StorageError> {
+    match load_config_with_migration(config_path) {
         Ok(loaded) => Ok((loaded, None)),
         Err(error @ StorageError::UnsupportedSchema { .. }) => Err(error),
         Err(error) => {
@@ -274,11 +282,6 @@ fn migrate_legacy_config(config: &mut AppConfig) -> bool {
         changed = true;
     }
 
-    if config.schema_version != CONFIG_SCHEMA_VERSION {
-        config.schema_version = CONFIG_SCHEMA_VERSION;
-        changed = true;
-    }
-
     changed
 }
 
@@ -297,6 +300,7 @@ fn current_clock_text() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::load_config;
 
     #[test]
     fn settings_window_is_wide_enough_for_the_editor_workbench() {

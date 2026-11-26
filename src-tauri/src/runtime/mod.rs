@@ -411,6 +411,31 @@ mod tests {
     }
 
     #[test]
+    fn restart_preserves_the_previous_config_backup() -> Result<(), Box<dyn std::error::Error>> {
+        let unique = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+        let dir = std::env::temp_dir().join(format!("tickerbar-restart-{unique}"));
+        let path = dir.join("config.json");
+        let original = AppConfig::default();
+        let updated = AppConfig {
+            launch_at_login: true,
+            ..original.clone()
+        };
+        save_config(&path, &original)?;
+        save_config(&path, &updated)?;
+
+        let result = prepare_startup_config(&path);
+        let backup = load_config(&path.with_extension("json.bak"));
+        fs::remove_dir_all(dir)?;
+
+        let (loaded, first_run, note) = result?;
+        assert_eq!(loaded, updated);
+        assert!(!first_run);
+        assert!(note.is_none());
+        assert_eq!(backup?, Some(original));
+        Ok(())
+    }
+
+    #[test]
     fn newer_config_is_never_moved_or_replaced_by_recovery() {
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)

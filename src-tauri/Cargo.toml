@@ -1,6 +1,6 @@
 [package]
 name = "tickerbar"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 description = "在 macOS 菜单栏显示股票价格、涨跌与持仓收益的本地工具"
 license = "MIT"

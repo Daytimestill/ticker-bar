@@ -1,5 +1,5 @@
-import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [vue()],
@@ -9,16 +9,16 @@ export default defineConfig({
     strictPort: true,
   },
   test: {
+    dir: 'src',
     environment: 'node',
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary'],
+      include: ['src/**/*.{ts,vue}'],
       exclude: [
         'src/main.ts',
-        'src/env.d.ts',
-        'vite.config.ts',
-        'dist/**',
-        '**/target/**',
+        'src/**/*.d.ts',
+        'src/**/*.test.ts',
       ],
       thresholds: {
         lines: 80,
